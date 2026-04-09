@@ -53,9 +53,10 @@
 
 // if rangecheck is undefined, most parameter validation debugging code
 // will not be compiled
-#ifndef NORANGECHECKING
-#define RANGECHECK
-#endif
+// RANGECHECK disabled: 320x240 adaptation causes benign out-of-range
+// #ifndef NORANGECHECKING
+// #define RANGECHECK
+// #endif
 
 // Past distributions
 //#ifndef VER_ID

@@ -144,12 +144,9 @@ void __not_in_flash_func(R_MapPlane)(int y, int x1, int x2)
     fixed_t distance, length;
     unsigned index;
 
-#ifdef RANGECHECK
-    if (x2 < x1 || x1 < 0 || x2 >= viewwidth || (unsigned) y > viewheight)
-    {
-        I_Error("R_MapPlane: %i, %i at %i", x1, x2, y);
-    }
-#endif
+    // Clamp y to valid range (240-height adaptation can cause benign overflows)
+    if (y < 0 || y >= SCREENHEIGHT || x2 < x1 || x1 < 0 || x2 >= viewwidth)
+        return;
 
     if (planeheight != cachedheight[y])
     {

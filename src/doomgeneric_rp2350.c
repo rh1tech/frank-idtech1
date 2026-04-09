@@ -70,22 +70,27 @@ static int max_label_width_5x7(const iwad_entry_t *const *entries, int entry_cou
 static void render_iwad_menu_entries(const iwad_entry_t *const *available,
                                      int available_count,
                                      int selected,
+                                     int scroll_offset,
+                                     int max_visible,
                                      int menu_x,
                                      int menu_y,
                                      int line_h,
                                      int menu_w,
-                                     int menu_h,
+                                     int visible_h,
                                      int highlight_h) {
     // Clear menu area.
-    fill_rect(menu_x - 2, menu_y - 2, menu_w + 4, menu_h + 4, 0);
+    fill_rect(menu_x - 2, menu_y - 2, menu_w + 4, visible_h + 4, 0);
 
     if (available_count <= 0) {
         draw_text_5x7(menu_x, menu_y, "NONE", 1);
         return;
     }
 
-    for (int i = 0; i < available_count; ++i) {
-        const int y = menu_y + i * line_h;
+    int end = scroll_offset + max_visible;
+    if (end > available_count) end = available_count;
+
+    for (int i = scroll_offset; i < end; ++i) {
+        const int y = menu_y + (i - scroll_offset) * line_h;
         const char *disp = available[i]->label;
 
         if (i == selected) {
@@ -95,6 +100,12 @@ static void render_iwad_menu_entries(const iwad_entry_t *const *available,
             draw_text_5x7(menu_x, y, disp, 1);
         }
     }
+
+    // Scroll indicators
+    if (scroll_offset > 0)
+        draw_text_5x7(menu_x + menu_w + 6, menu_y, "^", 1);
+    if (end < available_count)
+        draw_text_5x7(menu_x + menu_w + 6, menu_y + (max_visible - 1) * line_h, "v", 1);
 }
 
 static const uint8_t *glyph_5x7(char ch) {
@@ -592,12 +603,12 @@ void DG_StartScreen(void) {
     // Reserved for the loading window text/border (keep bright even after we dim UI text).
     graphics_set_palette(20, 0xFFFFFF);
 
-    // Background palette (2..17): multi-game theme (neutral blue-green).
+    // Background palette (2..17): brighter blue theme.
     static const uint32_t bg_pal[16] = {
-        0x010305, 0x020508, 0x03070B, 0x04090E,
-        0x050B12, 0x060D16, 0x070F1A, 0x08111E,
-        0x091322, 0x0A1526, 0x0B172A, 0x0C192E,
-        0x0D1B33, 0x0E1D38, 0x0F1F3D, 0x102142,
+        0x020308, 0x040610, 0x060918, 0x080C20,
+        0x0A0F28, 0x0C1230, 0x0E1538, 0x101840,
+        0x121B48, 0x141E50, 0x162158, 0x182460,
+        0x1A2768, 0x1C2A70, 0x1E2D78, 0x203080,
     };
     for (int i = 0; i < 16; ++i) {
         graphics_set_palette(2 + i, bg_pal[i]);
@@ -639,15 +650,14 @@ void DG_StartScreen(void) {
         {"hexdd.wad",    "HEXEN: DEATHKINGS",              ENGINE_HEXEN},
     };
 
-    const int panel_x = 24;
-    const int panel_y = 24;
-    const int panel_w = DOOMGENERIC_RESX - 48;
-    const int panel_h = DOOMGENERIC_RESY - 48;
+    const int panel_x = 16;
+    const int panel_y = 16;
+    const int panel_w = DOOMGENERIC_RESX - 32;
+    const int panel_h = DOOMGENERIC_RESY - 32;
 
     const int menu_x = panel_x + 4;
     const int menu_y = panel_y + 56;
     const int line_h = 10;
-    const int menu_h = (int)(sizeof(game_iwads) / sizeof(game_iwads[0])) * line_h;
     const int highlight_h = 9;
 
     // Build list of available IWADs.
@@ -669,6 +679,10 @@ void DG_StartScreen(void) {
         }
     }
 
+    const int bottom_y0 = panel_y + panel_h - 32;
+    const int max_visible = (bottom_y0 - menu_y - 4) / line_h;  // fit between menu and status text
+    const int visible_h = max_visible * line_h;
+    int scroll_offset = 0;
     int selected = 0;
 
 #ifndef FRANK_VERSION
@@ -731,11 +745,10 @@ void DG_StartScreen(void) {
     draw_text_5x7_scaled(title_x + title_left_w, title_y, title_right, 1, title_scale, false);
 
     draw_text_5x7(menu_x, menu_y - 14, "Select WAD:", 1);
-    const int bottom_y0 = panel_y + panel_h - 32;
     draw_text_5x7(menu_x, bottom_y0 + 0, status1, 1);
     draw_text_5x7(menu_x, bottom_y0 + 10, status2, 1);
     draw_text_5x7(menu_x, bottom_y0 + 20, status3, 1);
-    render_iwad_menu_entries(available, available_count, selected, menu_x, menu_y, line_h, menu_w, menu_h, highlight_h);
+    render_iwad_menu_entries(available, available_count, selected, scroll_offset, max_visible, menu_x, menu_y, line_h, menu_w, visible_h, highlight_h);
 
     int prev_selected = selected;
 
@@ -745,7 +758,10 @@ void DG_StartScreen(void) {
         draw_animated_background_border(now_ms, panel_x, panel_y, panel_w, panel_h);
 
         if (prev_selected != selected) {
-            render_iwad_menu_entries(available, available_count, selected, menu_x, menu_y, line_h, menu_w, menu_h, highlight_h);
+            // Adjust scroll to keep selection visible
+            if (selected < scroll_offset) scroll_offset = selected;
+            if (selected >= scroll_offset + max_visible) scroll_offset = selected - max_visible + 1;
+            render_iwad_menu_entries(available, available_count, selected, scroll_offset, max_visible, menu_x, menu_y, line_h, menu_w, visible_h, highlight_h);
             prev_selected = selected;
         }
 
@@ -777,7 +793,7 @@ void DG_StartScreen(void) {
                 draw_text_5x7_scaled(title_x, title_y, title_left, 1, title_scale, false);
 
                 // Remove selection inversion.
-                render_iwad_menu_entries(available, available_count, -1, menu_x, menu_y, line_h, menu_w, menu_h, highlight_h);
+                render_iwad_menu_entries(available, available_count, -1, scroll_offset, max_visible, menu_x, menu_y, line_h, menu_w, visible_h, highlight_h);
 
                 // Fade out the start-screen background.
                 fade_start_screen_bg_to_black(bg_pal, title_hl_rgb, 10, 20);
