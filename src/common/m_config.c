@@ -2783,10 +2783,10 @@ char *M_GetSaveGameDir(const char *iwadname)
 
     //     free(topdir);
     // }
-    // Use heretic/saves/ directory on SD card for save games
-    M_MakeDirectory("heretic");
-    M_MakeDirectory("heretic/saves");
-    savegamedir = M_StringDuplicate("heretic/saves/");
+    // Use idtech1/saves/ directory on SD card for save games
+    M_MakeDirectory("idtech1");
+    M_MakeDirectory("idtech1/saves");
+    savegamedir = M_StringDuplicate("idtech1/saves/");
 
     return savegamedir;
 }

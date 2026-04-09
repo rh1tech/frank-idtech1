@@ -2,6 +2,7 @@
 #include "m_misc.h"
 #include "z_zone.h"
 #include "i_system.h"
+#include "psram_allocator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -199,6 +200,13 @@ char *M_StringDuplicate(const char *orig)
     char *result;
 
     result = strdup(orig);
+    if (result == NULL)
+    {
+        // SRAM heap exhausted - fall back to PSRAM (won't be freeable)
+        size_t len = strlen(orig) + 1;
+        result = psram_malloc(len);
+        if (result) memcpy(result, orig, len);
+    }
 
     if (result == NULL)
     {
@@ -330,6 +338,11 @@ char *M_StringJoin(const char *s, ...)
     va_end(args);
 
     result = malloc(result_len);
+    if (result == NULL)
+    {
+        // SRAM heap exhausted - fall back to PSRAM (won't be freeable)
+        result = psram_malloc(result_len);
+    }
 
     if (result == NULL)
     {
@@ -503,5 +516,20 @@ char *M_getenv(const char *name)
 {
     // Not supported on embedded
     return NULL;
+}
+
+// M_NormalizeSlashes
+// Remove trailing slashes, translate backslashes to slashes
+// (needed by Strife's m_saves.c hub save system)
+void M_NormalizeSlashes(char *str)
+{
+    char *p;
+    for (p = str; *p; p++)
+    {
+        if ((*p == '/' || *p == '\\') && *p != DIR_SEPARATOR)
+            *p = DIR_SEPARATOR;
+    }
+    while (p > str && *--p == DIR_SEPARATOR)
+        *p = 0;
 }
 

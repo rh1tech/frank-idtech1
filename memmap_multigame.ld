@@ -214,29 +214,34 @@ SECTIONS
     .bss (NOLOAD) : {
         . = ALIGN(4);
         __tbss_end = .;
-        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir* *hexen_game.dir*) .bss*)
-        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir* *hexen_game.dir*) COMMON)
+        *(EXCLUDE_FILE(*doom_game* *heretic_game* *hexen_game* *strife_game*) .bss*)
+        *(EXCLUDE_FILE(*doom_game* *heretic_game* *hexen_game* *strife_game*) COMMON)
         PROVIDE(__global_pointer$ = . + 2K);
-        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir* *hexen_game.dir*) .sbss*)
+        *(EXCLUDE_FILE(*doom_game* *heretic_game* *hexen_game* *strife_game*) .sbss*)
         . = ALIGN(4);
     } > RAM
 
     /* Game BSS overlay: only one engine runs at a time, so they share RAM */
     OVERLAY : NOCROSSREFS {
         .bss.doom {
-            *doom_game.dir*(.bss*)
-            *doom_game.dir*(COMMON)
-            *doom_game.dir*(.sbss*)
+            *doom_game*(.bss*)
+            *doom_game*(COMMON)
+            *doom_game*(.sbss*)
         }
         .bss.heretic {
-            *heretic_game.dir*(.bss*)
-            *heretic_game.dir*(COMMON)
-            *heretic_game.dir*(.sbss*)
+            *heretic_game*(.bss*)
+            *heretic_game*(COMMON)
+            *heretic_game*(.sbss*)
         }
         .bss.hexen {
-            *hexen_game.dir*(.bss*)
-            *hexen_game.dir*(COMMON)
-            *hexen_game.dir*(.sbss*)
+            *hexen_game*(.bss*)
+            *hexen_game*(COMMON)
+            *hexen_game*(.sbss*)
+        }
+        .bss.strife {
+            *strife_game*(.bss*)
+            *strife_game*(COMMON)
+            *strife_game*(.sbss*)
         }
     } > RAM
 

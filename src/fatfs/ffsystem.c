@@ -15,11 +15,13 @@
 #include <stdlib.h>		/* with POSIX API */
 
 
+extern void *psram_malloc(size_t size);
+
 void* ff_memalloc (	/* Returns pointer to the allocated memory block (null if not enough core) */
 	UINT msize		/* Number of bytes to allocate */
 )
 {
-	void *p = malloc((size_t)msize);	/* Allocate a new memory block */
+	void *p = psram_malloc((size_t)msize);	/* Allocate from PSRAM (SRAM heap too small) */
 	if (!p) {
 		printf("ff_memalloc(%u) FAILED!\n", msize);
 	}
@@ -31,7 +33,9 @@ void ff_memfree (
 	void* mblock	/* Pointer to the memory block to free (no effect if null) */
 )
 {
-	free(mblock);	/* Free the memory block */
+	/* Don't free PSRAM pointers (0x11xxxxxx range) - bump allocator can't free */
+	if (mblock && ((uintptr_t)mblock < 0x11000000 || (uintptr_t)mblock >= 0x12000000))
+		free(mblock);
 }
 
 #endif

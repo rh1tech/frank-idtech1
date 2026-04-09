@@ -779,9 +779,9 @@ R_InitBuffer
     else 
 	viewwindowy = (SCREENHEIGHT-SBARHEIGHT-height) >> 1; 
 
-    // Preclaculate all row offsets.
-    for (i=0 ; i<height ; i++) 
-	ylookup[i] = I_VideoBuffer + (i+viewwindowy)*SCREENWIDTH; 
+    // Preclaculate all row offsets (full screen height for 240 adaptation).
+    for (i=0 ; i<SCREENHEIGHT ; i++)
+	ylookup[i] = I_VideoBuffer + (i+viewwindowy)*SCREENWIDTH;
 } 
  
  

@@ -49,6 +49,7 @@ typedef enum {
     ENGINE_DOOM = 0,
     ENGINE_HERETIC = 1,
     ENGINE_HEXEN = 2,
+    ENGINE_STRIFE = 3,
 } game_engine_t;
 
 typedef struct {
@@ -466,6 +467,9 @@ static const known_iwad_t known_iwads[] = {
     // Hexen IWADs
     {"hexen.wad",     ENGINE_HEXEN},
     {"hexdd.wad",     ENGINE_HEXEN},
+    // Strife IWADs
+    {"strife1.wad",   ENGINE_STRIFE},
+    {"strife0.wad",   ENGINE_STRIFE},
 };
 
 // Number of known IWADs
@@ -648,6 +652,8 @@ void DG_StartScreen(void) {
         {"heretic1.wad", "HERETIC SHAREWARE",              ENGINE_HERETIC},
         {"hexen.wad",    "HEXEN (hexen.wad)",              ENGINE_HEXEN},
         {"hexdd.wad",    "HEXEN: DEATHKINGS",              ENGINE_HEXEN},
+        {"strife1.wad",  "STRIFE (strife1.wad)",           ENGINE_STRIFE},
+        {"strife0.wad",  "STRIFE DEMO (strife0.wad)",      ENGINE_STRIFE},
     };
 
     const int panel_x = 16;
@@ -828,6 +834,8 @@ void DG_StartScreen(void) {
                     new_argv[0] = (char *)"doom";
                 } else if (available[selected]->engine == ENGINE_HEXEN) {
                     new_argv[0] = (char *)"hexen";
+                } else if (available[selected]->engine == ENGINE_STRIFE) {
+                    new_argv[0] = (char *)"strife";
                 } else {
                     new_argv[0] = (char *)"heretic";
                 }
@@ -919,12 +927,16 @@ void I_Quit(void) {
 }
 
 byte *I_ZoneBase(int *size) {
-    // 4MB PERM minus 512KB scratch = 3.5MB usable for zone + other allocations
-    *size = 3 * 1024 * 1024; // 3MB PSRAM for zone
+    // 6MB PERM pool: try 5MB zone first, fall back
+    *size = 5 * 1024 * 1024; // 5MB PSRAM for zone (Strife+voices needs more)
     void *ptr = psram_malloc(*size);
 
     if (!ptr) {
-        *size = 2 * 1024 * 1024; // Try 2MB
+        *size = 4 * 1024 * 1024;
+        ptr = psram_malloc(*size);
+    }
+    if (!ptr) {
+        *size = 3 * 1024 * 1024;
         ptr = psram_malloc(*size);
     }
     return (byte *)ptr;

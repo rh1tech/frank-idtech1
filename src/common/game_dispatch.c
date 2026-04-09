@@ -4,7 +4,7 @@
 
 #include "deh_defs.h"
 
-// Game selection from doomgeneric.c: 0 = doom, 1 = heretic, 2 = hexen
+// Game selection from doomgeneric.c: 0 = doom, 1 = heretic, 2 = hexen, 3 = strife
 extern int active_game;
 
 // Prefixed versions from each game engine (defined in game-specific code)
@@ -14,6 +14,8 @@ extern deh_section_t *HERETIC_deh_section_types[];
 extern const char *HERETIC_deh_signatures[];
 extern deh_section_t *HEXEN_deh_section_types[];
 extern const char *HEXEN_deh_signatures[];
+extern deh_section_t *STRIFE_deh_section_types[];
+extern const char *STRIFE_deh_signatures[];
 
 // The common deh_main.c expects these as extern arrays:
 //   extern deh_section_t *deh_section_types[];
@@ -55,6 +57,9 @@ void game_dispatch_init(void)
     } else if (active_game == 2) {
         src_sections = HEXEN_deh_section_types;
         src_sigs = HEXEN_deh_signatures;
+    } else if (active_game == 3) {
+        src_sections = STRIFE_deh_section_types;
+        src_sigs = STRIFE_deh_signatures;
     } else {
         src_sections = HERETIC_deh_section_types;
         src_sigs = HERETIC_deh_signatures;
@@ -72,3 +77,32 @@ void game_dispatch_init(void)
     }
     deh_signatures[i] = NULL;
 }
+
+// ============================================================================
+// Network stubs (net_server.c and net_client.c excluded to save ~30K SRAM)
+// d_loop.c references these functions but networking is unused on embedded.
+// ============================================================================
+
+#include "doomtype.h"
+
+// net_server.c stubs
+void NET_SV_Init(void) {}
+void NET_SV_Run(void) {}
+void NET_SV_Shutdown(void) {}
+void NET_SV_AddModule(void *module) { (void)module; }
+void NET_SV_RegisterWithMaster(void) {}
+void NET_SV_SendWaitingData(void *addr) { (void)addr; }
+
+// net_client.c stubs
+boolean NET_CL_Connect(void *addr, void *data) { (void)addr; (void)data; return false; }
+void NET_CL_Disconnect(void) {}
+void NET_CL_Run(void) {}
+void NET_CL_SendTiccmd(void *ticcmd, int tic) { (void)ticcmd; (void)tic; }
+boolean NET_CL_GetSettings(void *settings) { (void)settings; return false; }
+void NET_CL_LaunchGame(void) {}
+void NET_CL_StartGame(void *settings) { (void)settings; }
+int net_client_connected = 0;
+int net_client_received_wait_data = 0;
+int drone = 0;
+void *net_client_wait_data = 0;
+char *net_client_reject_reason = 0;

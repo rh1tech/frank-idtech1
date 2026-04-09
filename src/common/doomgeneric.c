@@ -15,11 +15,13 @@ extern void HERETIC_D_DoomMain(void);
 extern void HERETIC_doomgeneric_Tick(void);
 extern void HEXEN_D_DoomMain(void);
 extern void HEXEN_doomgeneric_Tick(void);
+extern void STRIFE_D_DoomMain(void);
+extern void STRIFE_doomgeneric_Tick(void);
 
 // Initialize game dispatch tables (deh_section_types, etc.)
 extern void game_dispatch_init(void);
 
-// Game selection: 0 = doom, 1 = heretic, 2 = hexen
+// Game selection: 0 = doom, 1 = heretic, 2 = hexen, 3 = strife
 int active_game = 1;  // default to heretic
 
 void DG_StartScreen(void) __attribute__((weak));
@@ -45,6 +47,8 @@ void doomgeneric_Create(int argc, char **argv)
 		DOOM_D_DoomMain();
 	} else if (active_game == 2) {
 		HEXEN_D_DoomMain();
+	} else if (active_game == 3) {
+		STRIFE_D_DoomMain();
 	} else {
 		HERETIC_D_DoomMain();
 	}
@@ -56,6 +60,8 @@ void doomgeneric_Tick(void)
 		DOOM_doomgeneric_Tick();
 	} else if (active_game == 2) {
 		HEXEN_doomgeneric_Tick();
+	} else if (active_game == 3) {
+		STRIFE_doomgeneric_Tick();
 	} else {
 		HERETIC_doomgeneric_Tick();
 	}

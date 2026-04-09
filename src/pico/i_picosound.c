@@ -302,7 +302,7 @@ static boolean init_channel_for_sfx(pico_channel_t *ch, const sfxinfo_t *sfxinfo
     {
         char namebuf[9];
         GetSfxLumpName(base, namebuf, sizeof(namebuf));
-        lumpnum = W_GetNumForName(namebuf);
+        lumpnum = W_CheckNumForName(namebuf);
         if (lumpnum < 0)
         {
             return false;
@@ -380,7 +380,7 @@ static int I_Pico_GetSfxLumpNum(sfxinfo_t *sfx)
 {
     char namebuf[9];
     GetSfxLumpName(sfx, namebuf, sizeof(namebuf));
-    return W_GetNumForName(namebuf);
+    return W_CheckNumForName(namebuf);
 }
 
 static void I_Pico_UpdateSoundParams(int handle, int vol, int sep)

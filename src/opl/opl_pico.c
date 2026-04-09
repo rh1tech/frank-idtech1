@@ -182,9 +182,11 @@ extern void TrackTimerCallback(void *track);
 extern uint8_t restart_song_state;
 #endif
 
-// Temp buffer for OPL 32-bit to 16-bit conversion (moved to file scope to avoid any stack issues)
+// Temp buffer for OPL 32-bit to 16-bit conversion (allocated in PSRAM to save SRAM)
 #if USE_EMU8950_OPL
-static int32_t opl_temp_buffer[2048 * 2]; // stereo, max samples
+#include "psram_allocator.h"
+static int32_t *opl_temp_buffer = NULL;
+#define OPL_TEMP_BUFFER_SIZE (2048 * 2)
 #endif
 
 void OPL_Pico_Mix_callback(audio_buffer_t *audio_buffer)
@@ -255,7 +257,8 @@ void OPL_Pico_Mix_callback(audio_buffer_t *audio_buffer)
                 }
                 
                 // OPL outputs 32-bit samples but audio buffer expects 16-bit
-                // Use file-scope buffer to avoid any stack/corruption issues
+                if (!opl_temp_buffer)
+                    opl_temp_buffer = (int32_t *)psram_malloc(OPL_TEMP_BUFFER_SIZE * sizeof(int32_t));
                 OPL_calc_buffer_stereo(emu8950_opl, opl_temp_buffer, nsamples);
 
                 // Extract mono sample from packed stereo (both halves identical)

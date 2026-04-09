@@ -102,8 +102,10 @@ list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_input_stubs\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_system\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*midifile\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*m_misc\\.c$")
-# Exclude network dedicated server (not used on embedded)
+# Exclude network files not used on embedded (saves ~30K SRAM)
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*net_dedicated\\.c$")
+list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*net_server\\.c$")
+list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*net_client\\.c$")
 
 # Shared compile definitions for all game targets
 set(SHARED_GAME_DEFS
@@ -139,6 +141,7 @@ set(SHARED_GAME_DEFS
     EMU8950_SLOT_RENDER=1
     EMU8950_NO_RATECONV=1
     PICO_ON_DEVICE=1
+    PICO_MALLOC_PANIC=0
     FRANK_VERSION="${FRANK_VERSION}"
 )
 
@@ -146,6 +149,7 @@ set(SHARED_GAME_DEFS
 file(GLOB DOOM_GAME_SOURCES src/doom/*.c)
 file(GLOB HERETIC_GAME_SOURCES src/heretic/*.c)
 file(GLOB HEXEN_GAME_SOURCES src/hexen/*.c)
+file(GLOB STRIFE_GAME_SOURCES src/strife/*.c)
 
 # Shared game include/compile setup (avoids linking pico_stdlib into OBJECT libs)
 set(GAME_INCLUDE_DIRS
@@ -175,6 +179,13 @@ target_compile_options(hexen_game PRIVATE -Ofast -fdata-sections -ffunction-sect
 target_compile_definitions(hexen_game PRIVATE GAME_HEXEN=1 HEXEN=1 ${SHARED_GAME_DEFS}
     $<TARGET_PROPERTY:pico_stdlib,INTERFACE_COMPILE_DEFINITIONS>)
 
+# Strife object library (namespaced with STRIFE_ prefix)
+add_library(strife_game OBJECT ${STRIFE_GAME_SOURCES})
+target_include_directories(strife_game PRIVATE src/strife ${GAME_INCLUDE_DIRS})
+target_compile_options(strife_game PRIVATE -Ofast -fdata-sections -ffunction-sections -include ${CMAKE_SOURCE_DIR}/src/strife/strife_prefix.h)
+target_compile_definitions(strife_game PRIVATE GAME_STRIFE=1 STRIFE=1 ${SHARED_GAME_DEFS}
+    $<TARGET_PROPERTY:pico_stdlib,INTERFACE_COMPILE_DEFINITIONS>)
+
 # Pico platform + OPL sources
 set(PICO_SOURCES
     src/pico/i_picosound.c
@@ -199,6 +210,7 @@ add_executable(frank-idtech1
     $<TARGET_OBJECTS:doom_game>
     $<TARGET_OBJECTS:heretic_game>
     $<TARGET_OBJECTS:hexen_game>
+    $<TARGET_OBJECTS:strife_game>
 )
 
 # Custom linker script with BSS OVERLAY (both games share same RAM region)
@@ -222,6 +234,7 @@ target_compile_options(frank-idtech1 PRIVATE -Ofast)
 
 target_compile_definitions(frank-idtech1 PRIVATE
     ${SHARED_GAME_DEFS}
+    PICO_MALLOC_PANIC=0
 )
 
 target_link_options(frank-idtech1 PRIVATE -Wl,-Map=frank-idtech1.map -Wl,--gc-sections)
