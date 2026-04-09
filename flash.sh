@@ -1,2 +1,2 @@
 #!/bin/bash
-picotool load ./build/frank-heretic.elf -f && picotool reboot
+picotool load ./build/frank-idtech1.elf -f && picotool reboot

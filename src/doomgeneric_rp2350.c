@@ -748,7 +748,7 @@ void DG_StartScreen(void) {
 
     draw_animated_background_border(to_ms_since_boot(get_absolute_time()), panel_x, panel_y, panel_w, panel_h);
     fill_rect(panel_x, panel_y, panel_w, panel_h, 0);
-    // Highlight "FRANK HERETIC" with green background and black text.
+    // Highlight "FRANK IDTECH1" with green background and black text.
     const int title_y = panel_y + 10;
     fill_rect(title_x - 2, title_y - 2, title_left_w + 4, 7 * title_scale + 4, 18);
     draw_text_5x7_scaled(title_x, title_y, title_left, 0, title_scale, false);

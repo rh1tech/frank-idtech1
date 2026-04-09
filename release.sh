@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# release.sh - Build all release variants of frank-heretic
+# release.sh - Build all release variants of frank-idtech1
 #
 # Creates UF2 files for each board variant (M1, M2) at each clock speed:
 #   - Non-overclocked: 252 MHz CPU, 100 MHz PSRAM
@@ -10,7 +10,7 @@
 # All builds include USB HID support (keyboard/mouse via USB).
 # PS/2 keyboard and mouse are also supported simultaneously.
 #
-# Output format: frank-heretic_mX_Y_Z_A_BB.uf2
+# Output format: frank-idtech1_mX_Y_Z_A_BB.uf2
 #   X  = Board variant (1 or 2)
 #   Y  = CPU clock in MHz
 #   Z  = PSRAM clock in MHz (target)
@@ -52,7 +52,7 @@ fi
 # Version input: from command line arg or interactive prompt
 echo ""
 echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────┐${NC}"
-echo -e "${CYAN}│                    frank-heretic Release Builder                  │${NC}"
+echo -e "${CYAN}│                    frank-idtech1 Release Builder                  │${NC}"
 echo -e "${CYAN}└─────────────────────────────────────────────────────────────────┘${NC}"
 echo ""
 echo -e "Last version: ${YELLOW}${LAST_MAJOR}.$(printf '%02d' $LAST_MINOR)${NC}"
@@ -131,7 +131,7 @@ for config in "${CONFIGS[@]}"; do
     fi
     
     # Output filename
-    OUTPUT_NAME="frank-heretic_m${BOARD_NUM}_${CPU}_${PSRAM}_${VERSION}.uf2"
+    OUTPUT_NAME="frank-idtech1_m${BOARD_NUM}_${CPU}_${PSRAM}_${VERSION}.uf2"
     
     echo ""
     echo -e "${CYAN}[$BUILD_COUNT/$TOTAL_BUILDS] Building: $OUTPUT_NAME${NC}"
@@ -148,8 +148,8 @@ for config in "${CONFIGS[@]}"; do
     # Build
     if make -j8 > /dev/null 2>&1; then
         # Copy UF2 to release directory
-        if [[ -f "frank-heretic.uf2" ]]; then
-            cp "frank-heretic.uf2" "$RELEASE_DIR/$OUTPUT_NAME"
+        if [[ -f "frank-idtech1.uf2" ]]; then
+            cp "frank-idtech1.uf2" "$RELEASE_DIR/$OUTPUT_NAME"
             echo -e "  ${GREEN}✓ Success${NC} → release/$OUTPUT_NAME"
         else
             echo -e "  ${RED}✗ UF2 not found${NC}"
@@ -170,6 +170,6 @@ echo -e "${GREEN}Release build complete!${NC}"
 echo ""
 echo "Release files in: $RELEASE_DIR/"
 echo ""
-ls -la "$RELEASE_DIR"/frank-heretic_*_${VERSION}.uf2 2>/dev/null | awk '{print "  " $9 " (" $5 " bytes)"}'
+ls -la "$RELEASE_DIR"/frank-idtech1_*_${VERSION}.uf2 2>/dev/null | awk '{print "  " $9 " (" $5 " bytes)"}'
 echo ""
 echo -e "Version: ${CYAN}${MAJOR}.$(printf '%02d' $MINOR)${NC}"

@@ -1,23 +1,36 @@
-# frank-heretic
+# FRANK idTech1
 
-Heretic for Raspberry Pi Pico 2 (RP2350) with HDMI output, SD card, PS/2 or USB keyboard/mouse, and OPL music.
+id Tech 1 games (Doom, Heretic, Hexen, Strife) for Raspberry Pi Pico 2 (RP2350) with HDMI output, SD card, PS/2 or USB keyboard/mouse, and OPL music.
+
+All four game engines are compiled into a single firmware binary. At startup, a WAD selector screen automatically detects available WAD files from the SD card and lets you choose which game to play.
+
+## Supported Games
+
+| Engine | Supported WADs |
+|--------|---------------|
+| **Doom** | doom.wad, doom2.wad, doom1.wad (shareware), plutonia.wad, tnt.wad, freedoom1.wad, freedoom2.wad, freedm.wad, chex.wad, hacx.wad |
+| **Heretic** | heretic.wad, heretic1.wad (shareware) |
+| **Hexen** | hexen.wad, hexdd.wad (Deathkings) |
+| **Strife** | strife1.wad, strife0.wad (demo) |
 
 ## Supported Boards
 
-This firmware is designed for the following RP2350-based boards with integrated HDMI, SD card, PS/2 (or USB), and PSRAM:
+This firmware is designed for RP2350-based boards with integrated HDMI, SD card, PS/2 (or USB), and PSRAM:
 
-- **[FRANK](https://rh1.tech/projects/frank?area=about)** — A versatile development board based on RP Pico 2, HDMI output, and extensive I/O options.
-- **[Murmulator](https://murmulator.ru)** — A compact retro-computing platform based on RP Pico 2, designed for emulators and classic games.
+- **[FRANK](https://rh1.tech/projects/frank?area=about)** -- A versatile development board based on RP Pico 2, HDMI output, and extensive I/O options.
+- **[Murmulator](https://murmulator.ru)** -- A compact retro-computing platform based on RP Pico 2, designed for emulators and classic games.
 
-Both boards provide all necessary peripherals out of the box—no additional wiring required.
+Both boards provide all necessary peripherals out of the box -- no additional wiring required.
 
 ## Features
 
-- Native 320×240 HDMI video output via PIO
+- Single firmware binary with all four id Tech 1 engines
+- WAD selector start screen with automatic WAD detection
+- Native 320x240 HDMI video output via PIO
 - Full OPL2 music emulation (EMU8950 with ARM assembly optimizations)
 - 8MB QSPI PSRAM support for game data
 - SD card support for WAD files and savegames
-- **PS/2 and USB keyboard and mouse input**
+- PS/2 and USB keyboard and mouse input
 - Sound effects and music at 49716 Hz
 
 ## Hardware Requirements
@@ -31,11 +44,11 @@ Both boards provide all necessary peripherals out of the box—no additional wir
 
 ### PSRAM Options
 
-Frank-Heretic requires 8MB PSRAM to run. You can obtain PSRAM-equipped hardware in several ways:
+FRANK idTech1 requires 8MB PSRAM to run. You can obtain PSRAM-equipped hardware in several ways:
 
 1. **Solder a PSRAM chip** on top of the Flash chip on a Pico 2 clone (SOP-8 flash chips are only available on clones, not the original Pico 2)
-2. **Build a [Nyx 2](https://rh1.tech/projects/nyx?area=nyx2)** — a DIY RP2350 board with integrated PSRAM
-3. **Purchase a [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107)** — a ready-made Pico 2 with 8MB PSRAM
+2. **Build a [Nyx 2](https://rh1.tech/projects/nyx?area=nyx2)** -- a DIY RP2350 board with integrated PSRAM
+3. **Purchase a [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107)** -- a ready-made Pico 2 with 8MB PSRAM
 
 ## Board Configurations
 
@@ -43,7 +56,7 @@ Two GPIO layouts are supported: **M1** and **M2**. The PSRAM pin is auto-detecte
 - **RP2350B**: GPIO47 (both M1 and M2)
 - **RP2350A**: GPIO19 (M1) or GPIO8 (M2)
 
-### HDMI (via 270Ω resistors)
+### HDMI (via 270 ohm resistors)
 | Signal | M1 GPIO | M2 GPIO |
 |--------|---------|---------|
 | CLK-   | 6       | 12      |
@@ -94,8 +107,8 @@ Two GPIO layouts are supported: **M1** and **M2**. The PSRAM pin is auto-detecte
 
 ```bash
 # Clone the repository
-git clone https://github.com/rh1tech/frank-heretic.git
-cd frank-heretic
+git clone https://github.com/rh1tech/frank-idtech1.git
+cd frank-idtech1
 
 # Build for M1 layout (default)
 mkdir build && cd build
@@ -131,32 +144,42 @@ To build both M1 and M2 variants with version numbering:
 ```
 
 This creates versioned UF2 files in the `release/` directory:
-- `frank-heretic_m1_X_XX.uf2`
-- `frank-heretic_m2_X_XX.uf2`
+- `frank-idtech1_m1_X_XX.uf2`
+- `frank-idtech1_m2_X_XX.uf2`
 
 ### Flashing
 
 ```bash
 # With device in BOOTSEL mode:
-picotool load build/frank-heretic.uf2
+picotool load build/frank-idtech1.uf2
 
 # Or with device running:
-picotool load -f build/frank-heretic.uf2
+picotool load -f build/frank-idtech1.uf2
 ```
 
 ## SD Card Setup
 
 1. Format an SD card as FAT32
-2. Create a `heretic` folder on the SD card
-3. Copy `HERETIC.WAD` (full version) or `HERETIC1.WAD` (shareware) to the `heretic` folder
-4. A `heretic/saves/` directory will be created automatically for save files
+2. Place WAD files in the root directory or in an `idtech1` folder
+3. The WAD selector will automatically detect all supported WADs at startup
+4. Save directories are created automatically per game
 
-### Shareware WAD Downloads
+### Where to Get WAD Files
 
-If you don't have the full game, you can download the shareware version:
-- **Heretic Shareware** (`HERETIC1.WAD`): [Download from Internet Archive](https://archive.org/details/Heretic_Shareware) or other retro gaming sites.
+**Shareware / Free:**
+- **Doom Shareware** (`doom1.wad`): [Internet Archive](https://archive.org/details/DoomsharewareEpisode)
+- **Freedoom** (`freedoom1.wad`, `freedoom2.wad`): [freedoom.github.io](https://freedoom.github.io/)
+- **Heretic Shareware** (`heretic1.wad`): [Internet Archive](https://archive.org/details/Heretic_Shareware)
+- **Strife Demo** (`strife0.wad`): [Internet Archive](https://archive.org/details/StrifeDemo)
 
-For the full game, purchase Heretic: Shadow of the Serpent Riders from [Steam](https://store.steampowered.com/app/2390/Heretic_Shadow_of_the_Serpent_Riders/) or [GOG](https://www.gog.com/game/heretic_shadow_of_the_serpent_riders).
+**Full versions** can be purchased from [Steam](https://store.steampowered.com/) or [GOG](https://www.gog.com/):
+- [The Ultimate Doom](https://store.steampowered.com/app/2280/Ultimate_Doom/)
+- [Doom II](https://store.steampowered.com/app/2300/DOOM_II/)
+- [Final Doom](https://store.steampowered.com/app/2290/Final_DOOM/)
+- [Heretic: Shadow of the Serpent Riders](https://store.steampowered.com/app/2390/Heretic_Shadow_of_the_Serpent_Riders/)
+- [Hexen: Beyond Heretic](https://store.steampowered.com/app/2360/HeXen_Beyond_Heretic/)
+- [Hexen: Deathkings of the Dark Citadel](https://store.steampowered.com/app/2370/HeXen_Deathkings_of_the_Dark_Citadel/)
+- [Strife: Veteran Edition](https://store.steampowered.com/app/317040/The_Original_Strife_Veteran_Edition/)
 
 ## Controls
 
@@ -167,7 +190,6 @@ For the full game, purchase Heretic: Shadow of the Serpent Riders from [Steam](h
 - Shift: Run
 - 1-7: Select weapon
 - Escape: Menu
-- Enter: Fly up (if artifact active)
 - Tab: Map
 
 ### Mouse
@@ -182,7 +204,7 @@ For the full game, purchase Heretic: Shadow of the Serpent Riders from [Steam](h
 GNU General Public License v2. See [LICENSE](LICENSE) for details.
 
 This project is based on:
-- [Chocolate Heretic](https://www.chocolate-doom.org/wiki/index.php/Chocolate_Heretic)
+- [Chocolate Doom](https://www.chocolate-doom.org/) (Doom, Heretic, Hexen, and Strife source ports)
 - [doomgeneric](https://github.com/ozkl/doomgeneric) by ozkl
 - [rp2040-doom](https://github.com/kilograham/rp2040-doom) by Graham Sanderson (OPL and Pico optimizations)
 - [EMU8950](https://github.com/digital-sound-antiques/emu8950) by Mitsutaka Okazaki (OPL2 emulator)
@@ -193,8 +215,9 @@ Mikhail Matveev <xtreme@rh1.tech>
 
 ## Acknowledgments
 
-- Raven Software for the original Heretic
 - id Software for the Doom engine
-- The Chocolate Doom team for the clean portable source port
+- Raven Software for Heretic and Hexen
+- Rogue Entertainment for Strife
+- The Chocolate Doom team for the clean portable source ports
 - Graham Sanderson for the incredible RP2040 optimizations and EMU8950 ARM assembly
 - The Raspberry Pi foundation for the RP2350 and Pico SDK
