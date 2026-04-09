@@ -558,7 +558,11 @@ extern void stdio_fatfs_init(void);
 // Global FatFs object
 FATFS fs;
 
+void install_fault_handler(void);
+
 void DG_Init() {
+    install_fault_handler();
+
     // Initialize PSRAM (pin auto-detected based on chip package)
     uint psram_pin = get_psram_pin();
     psram_init(psram_pin);
@@ -898,6 +902,55 @@ int DG_GetKey(int* pressed, unsigned char* key) {
 }
 
 void DG_SetWindowTitle(const char * title) {
+}
+
+// Hard fault handler - must be before DG_Init
+#include "hardware/exception.h"
+
+#include "hardware/watchdog.h"
+#include "hardware/structs/watchdog.h"
+
+#define CRASH_MAGIC 0xDEAD0FAD
+
+static void hard_fault_handler(void) {
+    uint32_t *stack;
+    __asm volatile("mrs %0, msp" : "=r"(stack));
+    volatile uint32_t *cfsr = (volatile uint32_t *)0xE000ED28;
+
+    // Save crash info to watchdog scratch registers (survive reboot)
+    watchdog_hw->scratch[0] = CRASH_MAGIC;
+    watchdog_hw->scratch[1] = stack[6];  // PC
+    watchdog_hw->scratch[2] = stack[5];  // LR
+    watchdog_hw->scratch[3] = *cfsr;     // CFSR
+    watchdog_hw->scratch[4] = stack[0];  // R0
+    watchdog_hw->scratch[5] = stack[1];  // R1
+
+    // Force immediate reboot
+    watchdog_reboot(0, 0, 0);
+    while(1);
+}
+
+void install_fault_handler(void) {
+    exception_set_exclusive_handler(HARDFAULT_EXCEPTION, hard_fault_handler);
+}
+
+// Call early in main to check for crash report from previous boot
+void check_crash_report(void) {
+    if (watchdog_hw->scratch[0] == CRASH_MAGIC) {
+        printf("\n*** CRASH REPORT FROM PREVIOUS BOOT ***\n");
+        printf("PC=0x%08lx  LR=0x%08lx\n",
+               (unsigned long)watchdog_hw->scratch[1],
+               (unsigned long)watchdog_hw->scratch[2]);
+        printf("CFSR=0x%08lx  R0=0x%08lx  R1=0x%08lx\n",
+               (unsigned long)watchdog_hw->scratch[3],
+               (unsigned long)watchdog_hw->scratch[4],
+               (unsigned long)watchdog_hw->scratch[5]);
+        // Clear so we don't print again
+        watchdog_hw->scratch[0] = 0;
+        printf("Use: arm-none-eabi-addr2line -e frank-idtech1.elf 0x%08lx\n",
+               (unsigned long)watchdog_hw->scratch[1]);
+        printf("***\n\n");
+    }
 }
 
 // I_System implementations

@@ -745,13 +745,13 @@ void G_DoLoadLevel (void)
         memset (players[i].frags,0,sizeof(players[i].frags)); 
     } 
 
-    P_SetupLevel (gamemap, 0, gameskill);    
-    displayplayer = consoleplayer;      // view the guy you are playing    
-    starttime = I_GetTime(); // haleyjd 20110204 [STRIFE]
-    gameaction = ga_nothing; 
+    printf("P_SetupLevel: map=%d skill=%d\n", gamemap, gameskill);
+    P_SetupLevel (gamemap, 0, gameskill);
+    printf("P_SetupLevel: done\n");
+    displayplayer = consoleplayer;
+    starttime = I_GetTime();
+    gameaction = ga_nothing;
     Z_CheckHeap ();
-
-    // clear cmd building stuff
 
     memset (gamekeydown, 0, sizeof(gamekeydown));
     joyxmove = joyymove = joystrafemove = joylook = 0;
@@ -765,7 +765,9 @@ void G_DoLoadLevel (void)
         players[consoleplayer].message = "Press escape to quit.";
     }
 
-    P_DialogLoad(); // villsa [STRIFE]
+    printf("P_DialogLoad\n");
+    P_DialogLoad();
+    printf("G_DoLoadLevel: done\n");
 } 
 
 static void SetJoyButtons(unsigned int buttons_mask)

@@ -288,8 +288,13 @@ void D_Display (void)
     I_UpdateNoBlit ();
 
     // draw the view directly
-    if (gamestate == GS_LEVEL && !automapactive && gametic)
+    if (gamestate == GS_LEVEL && !automapactive && gametic) {
+        static int rpv_count = 0;
+        printf("rpv#%d w=%d\n", rpv_count, wipe);
         R_RenderPlayerView (&players[displayplayer]);
+        printf("rpv#%d ok\n", rpv_count);
+        rpv_count++;
+    }
 
     // clean up border stuff
     if (gamestate != oldgamestate && gamestate != GS_LEVEL)
@@ -368,6 +373,7 @@ void D_Display (void)
     }
     
     // wipe update
+    printf("wipe start\n");
     wipe_EndScreen(0, 0, SCREENWIDTH, SCREENHEIGHT);
 
     wipestart = I_GetTime () - 1;
@@ -517,8 +523,13 @@ static boolean D_StartupGrabCallback(void)
 //  Called from the main loop in main.c.
 //  Replaces D_RunFrame for the doomgeneric abstraction layer.
 //
+static int tick_count = 0;
 void doomgeneric_Tick(void)
 {
+    tick_count++;
+    if (tick_count % 35 == 0)
+        printf("tick %d gs=%d\n", tick_count, gamestate);
+
     // frame syncronous IO operations
     I_StartFrame ();
 

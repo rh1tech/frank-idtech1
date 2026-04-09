@@ -31,10 +31,7 @@ static void str_to_upper(char *str)
 void M_MakeDirectory(const char *path)
 {
     FRESULT fr = f_mkdir(path);
-    if (fr != FR_OK && fr != FR_EXIST)
-    {
-        printf("Warning: Failed to create directory '%s' (error %d)\n", path, fr);
-    }
+    printf("M_MakeDirectory('%s') = %d\n", path, fr);
 }
 
 boolean M_FileExists(const char *filename)

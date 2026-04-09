@@ -24,7 +24,8 @@
 MEMORY
 {
     INCLUDE "pico_flash_region.ld"
-    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 512k
+    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 504k
+    STACKRAM(rwx) : ORIGIN = 0x2007E000, LENGTH = 8k
     SCRATCH_X(rwx) : ORIGIN = 0x20080000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 4k
 }
@@ -293,7 +294,7 @@ SECTIONS
     .stack_dummy (NOLOAD):
     {
         KEEP(*(.stack*))
-    } > SCRATCH_Y
+    } > STACKRAM
 
     .flash_end : {
         KEEP(*(.embedded_end_block*))
@@ -303,7 +304,7 @@ SECTIONS
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);
     __StackOneTop = ORIGIN(SCRATCH_X) + LENGTH(SCRATCH_X);
-    __StackTop = ORIGIN(SCRATCH_Y) + LENGTH(SCRATCH_Y);
+    __StackTop = ORIGIN(STACKRAM) + LENGTH(STACKRAM);
     __StackOneBottom = __StackOneTop - SIZEOF(.stack1_dummy);
     __StackBottom = __StackTop - SIZEOF(.stack_dummy);
     PROVIDE(__stack = __StackTop);

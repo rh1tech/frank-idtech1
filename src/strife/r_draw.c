@@ -111,27 +111,22 @@ void R_DrawColumn (void)
     fixed_t		frac;
     fixed_t		fracstep;	 
  
-    count = dc_yh - dc_yl; 
+    // Clamp to screen bounds (240-height adaptation)
+    if (dc_yl < 0) dc_yl = 0;
+    if (dc_yh >= SCREENHEIGHT) dc_yh = SCREENHEIGHT - 1;
+
+    count = dc_yh - dc_yl;
 
     // Zero length, column does not exceed a pixel.
-    if (count < 0) 
-	return; 
-				 
-#ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
-	|| dc_yl < 0
-	|| dc_yh >= SCREENHEIGHT) 
-	I_Error ("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x); 
-#endif 
+    if (count < 0)
+	return;
 
     // Framebuffer destination address.
-    // Use ylookup LUT to avoid multiply with ScreenWidth.
-    // Use columnofs LUT for subwindows? 
-    dest = ylookup[dc_yl] + columnofs[dc_x];  
+    dest = ylookup[dc_yl] + columnofs[dc_x];
 
     // Determine scaling,
     //  which is the only mapping to be done.
-    fracstep = dc_iscale; 
+    fracstep = dc_iscale;
     frac = dc_texturemid + (dc_yl-centery)*fracstep; 
 
     // Inner loop that does the actual texture mapping,
@@ -230,29 +225,24 @@ void R_DrawMVisTLColumn(void)
     fixed_t             frac;
     fixed_t             fracstep;
 
-    // Adjust borders. Low... 
-    if (!dc_yl) 
+    // Adjust borders. Low...
+    if (!dc_yl)
         dc_yl = 1;
 
     // .. and high.
-    if (dc_yh == viewheight-1) 
-        dc_yh = viewheight - 2; 
+    if (dc_yh == viewheight-1)
+        dc_yh = viewheight - 2;
 
-    count = dc_yh - dc_yl; 
+    // Clamp to screen bounds (240-height adaptation)
+    if (dc_yl < 0) dc_yl = 0;
+    if (dc_yh >= SCREENHEIGHT) dc_yh = SCREENHEIGHT - 1;
+
+    count = dc_yh - dc_yl;
 
     // Zero length.
-    if (count < 0) 
-        return; 
+    if (count < 0)
+        return;
 
-#ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
-        || dc_yl < 0 || dc_yh >= SCREENHEIGHT)
-    {
-        I_Error ("R_DrawFuzzColumn: %i to %i at %i",
-                 dc_yl, dc_yh, dc_x);
-    }
-#endif
-    
     dest = ylookup[dc_yl] + columnofs[dc_x];
 
     // Looks familiar.
@@ -283,29 +273,24 @@ void R_DrawTLColumn(void)
     fixed_t             frac;
     fixed_t             fracstep;	 
 
-    // Adjust borders. Low... 
-    if (!dc_yl) 
+    // Adjust borders. Low...
+    if (!dc_yl)
         dc_yl = 1;
 
     // .. and high.
-    if (dc_yh == viewheight-1) 
-        dc_yh = viewheight - 2; 
+    if (dc_yh == viewheight-1)
+        dc_yh = viewheight - 2;
 
-    count = dc_yh - dc_yl; 
+    // Clamp to screen bounds (240-height adaptation)
+    if (dc_yl < 0) dc_yl = 0;
+    if (dc_yh >= SCREENHEIGHT) dc_yh = SCREENHEIGHT - 1;
+
+    count = dc_yh - dc_yl;
 
     // Zero length.
-    if (count < 0) 
-        return; 
+    if (count < 0)
+        return;
 
-#ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
-        || dc_yl < 0 || dc_yh >= SCREENHEIGHT)
-    {
-        I_Error ("R_DrawFuzzColumn2: %i to %i at %i",
-                 dc_yl, dc_yh, dc_x);
-    }
-#endif
-    
     dest = ylookup[dc_yl] + columnofs[dc_x];
 
     // Looks familiar.
@@ -343,39 +328,32 @@ void R_DrawTranslatedColumn (void)
     fixed_t             frac;
     fixed_t             fracstep;
 
-    count = dc_yh - dc_yl; 
-    if (count < 0) 
-        return; 
+    // Clamp to screen bounds (240-height adaptation)
+    if (dc_yl < 0) dc_yl = 0;
+    if (dc_yh >= SCREENHEIGHT) dc_yh = SCREENHEIGHT - 1;
 
-#ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
-        || dc_yl < 0
-        || dc_yh >= SCREENHEIGHT)
-    {
-        I_Error ( "R_DrawColumn: %i to %i at %i",
-                 dc_yl, dc_yh, dc_x);
-    }
+    count = dc_yh - dc_yl;
+    if (count < 0)
+        return;
 
-#endif 
-
-    dest = ylookup[dc_yl] + columnofs[dc_x]; 
+    dest = ylookup[dc_yl] + columnofs[dc_x];
 
     // Looks familiar.
-    fracstep = dc_iscale; 
-    frac = dc_texturemid + (dc_yl-centery)*fracstep; 
+    fracstep = dc_iscale;
+    frac = dc_texturemid + (dc_yl-centery)*fracstep;
 
     // Here we do an additional index re-mapping.
-    do 
+    do
     {
         // Translation tables are used
         //  to map certain colorramps to other ones,
         //  used with PLAY sprites.
         // Thus the "green" ramp of the player 0 sprite
-        //  is mapped to gray, red, black/indigo. 
+        //  is mapped to gray, red, black/indigo.
         *dest = dc_colormap[dc_translation[dc_source[frac>>FRACBITS]]];
         dest += SCREENWIDTH;
-        frac += fracstep; 
-    } while (count--); 
+        frac += fracstep;
+    } while (count--);
 } 
 
 // haleyjd 09/06/10 [STRIFE] Removed low detail
@@ -393,35 +371,29 @@ void R_DrawTRTLColumn(void)
     fixed_t             frac;
     fixed_t             fracstep;
 
-    count = dc_yh - dc_yl; 
-    if (count < 0) 
-        return; 
+    // Clamp to screen bounds (240-height adaptation)
+    if (dc_yl < 0) dc_yl = 0;
+    if (dc_yh >= SCREENHEIGHT) dc_yh = SCREENHEIGHT - 1;
 
-#ifdef RANGECHECK 
-    if ((unsigned)dc_x >= SCREENWIDTH
-        || dc_yl < 0
-        || dc_yh >= SCREENHEIGHT)
-    {
-        I_Error ( "R_DrawColumn: %i to %i at %i",
-                 dc_yl, dc_yh, dc_x);
-    }
-#endif 
+    count = dc_yh - dc_yl;
+    if (count < 0)
+        return;
 
-    dest = ylookup[dc_yl] + columnofs[dc_x]; 
+    dest = ylookup[dc_yl] + columnofs[dc_x];
 
     // Looks familiar.
-    fracstep = dc_iscale; 
-    frac = dc_texturemid + (dc_yl-centery)*fracstep; 
+    fracstep = dc_iscale;
+    frac = dc_texturemid + (dc_yl-centery)*fracstep;
 
     // Here we do an additional index re-mapping.
-    do 
+    do
     {
         byte src = dc_colormap[dc_translation[dc_source[frac>>FRACBITS&127]]];
         byte col = xlatab[(*dest << 8) + src];
         *dest = col;
         dest += SCREENWIDTH;
-        frac += fracstep; 
-    } while (count--); 
+        frac += fracstep;
+    } while (count--);
 }
 
 
@@ -594,17 +566,9 @@ void R_DrawSpan (void)
     int spot;
     unsigned int xtemp, ytemp;
 
-#ifdef RANGECHECK
-    if (ds_x2 < ds_x1
-	|| ds_x1<0
-	|| ds_x2>=SCREENWIDTH
-	|| (unsigned)ds_y>SCREENHEIGHT)
-    {
-	I_Error( "R_DrawSpan: %i to %i at %i",
-		 ds_x1,ds_x2,ds_y);
-    }
-//	dscount++;
-#endif
+    // Clamp to screen bounds (240-height adaptation)
+    if (ds_y < 0) ds_y = 0;
+    if (ds_y >= SCREENHEIGHT) ds_y = SCREENHEIGHT - 1;
 
     // Pack position and step variables into a single 32-bit integer,
     // with x in the top 16 bits and y in the bottom 16 bits.  For
@@ -723,17 +687,9 @@ void R_DrawSpanLow (void)
     int count;
     int spot;
 
-#ifdef RANGECHECK
-    if (ds_x2 < ds_x1
-	|| ds_x1<0
-	|| ds_x2>=SCREENWIDTH
-	|| (unsigned)ds_y>SCREENHEIGHT)
-    {
-	I_Error( "R_DrawSpan: %i to %i at %i",
-		 ds_x1,ds_x2,ds_y);
-    }
-//	dscount++; 
-#endif
+    // Clamp to screen bounds (240-height adaptation)
+    if (ds_y < 0) ds_y = 0;
+    if (ds_y >= SCREENHEIGHT) ds_y = SCREENHEIGHT - 1;
 
     position = ((ds_xfrac << 10) & 0xffff0000)
              | ((ds_yfrac >> 6)  & 0x0000ffff);

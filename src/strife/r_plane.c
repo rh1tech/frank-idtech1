@@ -42,8 +42,8 @@ planefunction_t		ceilingfunc;
 //
 
 // Here comes the obnoxious "visplane".
-// haleyjd 08/29/10: [STRIFE] MAXVISPLANES increased to 200
-#define MAXVISPLANES	200
+// Increased for SCREENHEIGHT=240
+#define MAXVISPLANES	400
 
 // Allocated in PSRAM to save internal RAM
 extern void *psram_malloc(size_t size);
@@ -57,7 +57,7 @@ visplane_t*		ceilingplane;
 #define visplanes visplanes_ptr
 
 // ?
-#define MAXOPENINGS	SCREENWIDTH*64
+#define MAXOPENINGS	(SCREENWIDTH*256)  // Increased for SCREENHEIGHT=240
 short*			openings_ptr;
 short*			lastopening;
 

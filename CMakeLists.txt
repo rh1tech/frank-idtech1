@@ -274,6 +274,7 @@ target_link_libraries(frank-idtech1
     hardware_pwm
     hardware_irq
     hardware_interp
+    hardware_exception
     sdcard
     ps2kbd
     ps2mouse

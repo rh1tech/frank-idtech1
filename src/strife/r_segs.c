@@ -32,6 +32,11 @@
 #include "r_local.h"
 #include "r_sky.h"
 
+// For openings overflow protection
+#define MAXOPENINGS (SCREENWIDTH*256)
+extern short *openings_ptr;
+#define openings openings_ptr
+
 
 // OPTIMIZE: closed two sided lines as single sided
 
@@ -616,6 +621,8 @@ R_StoreWallRange
 	{
 	    // masked midtexture
 	    maskedtexture = true;
+	    if (lastopening + (rw_stopx - rw_x) >= openings + MAXOPENINGS)
+		return;  // openings overflow protection
 	    ds_p->maskedtexturecol = maskedtexturecol = lastopening - rw_x;
 	    lastopening += rw_stopx - rw_x;
 	}
@@ -726,17 +733,21 @@ R_StoreWallRange
     if ( ((ds_p->silhouette & SIL_TOP) || maskedtexture)
 	 && !ds_p->sprtopclip)
     {
-	memcpy (lastopening, ceilingclip+start, 2*(rw_stopx-start));
-	ds_p->sprtopclip = lastopening - start;
-	lastopening += rw_stopx - start;
+	if (lastopening + (rw_stopx - start) < openings + MAXOPENINGS) {
+	    memcpy (lastopening, ceilingclip+start, 2*(rw_stopx-start));
+	    ds_p->sprtopclip = lastopening - start;
+	    lastopening += rw_stopx - start;
+	}
     }
-    
+
     if ( ((ds_p->silhouette & SIL_BOTTOM) || maskedtexture)
 	 && !ds_p->sprbottomclip)
     {
-	memcpy (lastopening, floorclip+start, 2*(rw_stopx-start));
-	ds_p->sprbottomclip = lastopening - start;
-	lastopening += rw_stopx - start;	
+	if (lastopening + (rw_stopx - start) < openings + MAXOPENINGS) {
+	    memcpy (lastopening, floorclip+start, 2*(rw_stopx-start));
+	    ds_p->sprbottomclip = lastopening - start;
+	    lastopening += rw_stopx - start;
+	}
     }
 
     if (maskedtexture && !(ds_p->silhouette&SIL_TOP))

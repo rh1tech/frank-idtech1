@@ -63,6 +63,9 @@ int main() {
         sleep_ms(500);
     }
 
+    extern void check_crash_report(void);
+    check_crash_report();
+
     printf("frank-idtech1 - Multi-game for RP2350\n");
     printf("System Clock: %lu MHz\n", clock_get_hz(clk_sys) / 1000000);
     printf("Starting game engine...\n");

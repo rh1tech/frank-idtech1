@@ -2786,7 +2786,7 @@ char *M_GetSaveGameDir(const char *iwadname)
     // Use idtech1/saves/ directory on SD card for save games
     M_MakeDirectory("idtech1");
     M_MakeDirectory("idtech1/saves");
-    savegamedir = M_StringDuplicate("idtech1/saves/");
+    savegamedir = M_StringDuplicate("idtech1/saves");
 
     return savegamedir;
 }
