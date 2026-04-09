@@ -487,8 +487,11 @@ void R_InitBuffer(int width, int height)
         viewwindowy = 0;
     else
         viewwindowy = (SCREENHEIGHT - SBARHEIGHT - height) >> 1;
-    for (i = 0; i < SCREENHEIGHT; i++)
-        ylookup[i] = I_VideoBuffer + (i + viewwindowy) * SCREENWIDTH;
+    for (i = 0; i < SCREENHEIGHT; i++) {
+        int row = i + viewwindowy;
+        if (row >= SCREENHEIGHT) row = SCREENHEIGHT - 1;
+        ylookup[i] = I_VideoBuffer + row * SCREENWIDTH;
+    }
 }
 
 
