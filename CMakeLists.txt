@@ -93,7 +93,8 @@ list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_musicpack\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_oplmusic\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_winmusic\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_flmusic\\.c$")
-list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_cdmus\\.c$")
+# i_cdmus.c is needed by Hexen (CD music stubs)
+# list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_cdmus\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_scale\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_videohr\\.c$")
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*i_joystick\\.c$")
@@ -144,6 +145,7 @@ set(SHARED_GAME_DEFS
 # Game-specific sources (each game compiled with symbol prefix)
 file(GLOB DOOM_GAME_SOURCES src/doom/*.c)
 file(GLOB HERETIC_GAME_SOURCES src/heretic/*.c)
+file(GLOB HEXEN_GAME_SOURCES src/hexen/*.c)
 
 # Shared game include/compile setup (avoids linking pico_stdlib into OBJECT libs)
 set(GAME_INCLUDE_DIRS
@@ -164,6 +166,13 @@ add_library(heretic_game OBJECT ${HERETIC_GAME_SOURCES})
 target_include_directories(heretic_game PRIVATE src/heretic ${GAME_INCLUDE_DIRS})
 target_compile_options(heretic_game PRIVATE -Ofast -fdata-sections -ffunction-sections -include ${CMAKE_SOURCE_DIR}/src/heretic/heretic_prefix.h)
 target_compile_definitions(heretic_game PRIVATE GAME_HERETIC=1 HERETIC=1 ${SHARED_GAME_DEFS}
+    $<TARGET_PROPERTY:pico_stdlib,INTERFACE_COMPILE_DEFINITIONS>)
+
+# Hexen object library (namespaced with HEXEN_ prefix)
+add_library(hexen_game OBJECT ${HEXEN_GAME_SOURCES})
+target_include_directories(hexen_game PRIVATE src/hexen ${GAME_INCLUDE_DIRS})
+target_compile_options(hexen_game PRIVATE -Ofast -fdata-sections -ffunction-sections -include ${CMAKE_SOURCE_DIR}/src/hexen/hexen_prefix.h)
+target_compile_definitions(hexen_game PRIVATE GAME_HEXEN=1 HEXEN=1 ${SHARED_GAME_DEFS}
     $<TARGET_PROPERTY:pico_stdlib,INTERFACE_COMPILE_DEFINITIONS>)
 
 # Pico platform + OPL sources
@@ -189,6 +198,7 @@ add_executable(frank-idtech1
     ${PICO_SOURCES}
     $<TARGET_OBJECTS:doom_game>
     $<TARGET_OBJECTS:heretic_game>
+    $<TARGET_OBJECTS:hexen_game>
 )
 
 # Custom linker script with BSS OVERLAY (both games share same RAM region)

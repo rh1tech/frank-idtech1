@@ -4,7 +4,7 @@
 
 #include "deh_defs.h"
 
-// Game selection from doomgeneric.c: 0 = doom, 1 = heretic
+// Game selection from doomgeneric.c: 0 = doom, 1 = heretic, 2 = hexen
 extern int active_game;
 
 // Prefixed versions from each game engine (defined in game-specific code)
@@ -12,6 +12,8 @@ extern deh_section_t *DOOM_deh_section_types[];
 extern const char *DOOM_deh_signatures[];
 extern deh_section_t *HERETIC_deh_section_types[];
 extern const char *HERETIC_deh_signatures[];
+extern deh_section_t *HEXEN_deh_section_types[];
+extern const char *HEXEN_deh_signatures[];
 
 // The common deh_main.c expects these as extern arrays:
 //   extern deh_section_t *deh_section_types[];
@@ -50,6 +52,9 @@ void game_dispatch_init(void)
     if (active_game == 0) {
         src_sections = DOOM_deh_section_types;
         src_sigs = DOOM_deh_signatures;
+    } else if (active_game == 2) {
+        src_sections = HEXEN_deh_section_types;
+        src_sigs = HEXEN_deh_signatures;
     } else {
         src_sections = HERETIC_deh_section_types;
         src_sigs = HERETIC_deh_signatures;

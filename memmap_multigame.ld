@@ -214,10 +214,10 @@ SECTIONS
     .bss (NOLOAD) : {
         . = ALIGN(4);
         __tbss_end = .;
-        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir*) .bss*)
-        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir*) COMMON)
+        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir* *hexen_game.dir*) .bss*)
+        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir* *hexen_game.dir*) COMMON)
         PROVIDE(__global_pointer$ = . + 2K);
-        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir*) .sbss*)
+        *(EXCLUDE_FILE(*doom_game.dir* *heretic_game.dir* *hexen_game.dir*) .sbss*)
         . = ALIGN(4);
     } > RAM
 
@@ -232,6 +232,11 @@ SECTIONS
             *heretic_game.dir*(.bss*)
             *heretic_game.dir*(COMMON)
             *heretic_game.dir*(.sbss*)
+        }
+        .bss.hexen {
+            *hexen_game.dir*(.bss*)
+            *hexen_game.dir*(COMMON)
+            *hexen_game.dir*(.sbss*)
         }
     } > RAM
 

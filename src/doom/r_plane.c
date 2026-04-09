@@ -31,6 +31,7 @@
 
 #include "r_local.h"
 #include "r_sky.h"
+#include "psram_allocator.h"
 
 
 
@@ -43,14 +44,14 @@ planefunction_t		ceilingfunc;
 
 // Here comes the obnoxious "visplane".
 #define MAXVISPLANES	128
-visplane_t		visplanes[MAXVISPLANES];
+visplane_t*		visplanes;
 visplane_t*		lastvisplane;
 visplane_t*		floorplane;
 visplane_t*		ceilingplane;
 
 // ?
 #define MAXOPENINGS	SCREENWIDTH*64
-short			openings[MAXOPENINGS];
+short*			openings;
 short*			lastopening;
 
 
@@ -93,7 +94,8 @@ fixed_t			cachedystep[SCREENHEIGHT];
 //
 void R_InitPlanes (void)
 {
-  // Doh!
+  visplanes = (visplane_t *)psram_malloc(MAXVISPLANES * sizeof(visplane_t));
+  openings = (short *)psram_malloc(MAXOPENINGS * sizeof(short));
 }
 
 

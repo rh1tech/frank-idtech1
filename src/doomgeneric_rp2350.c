@@ -48,6 +48,7 @@ static void fill_rect(int x, int y, int w, int h, pixel_t color) {
 typedef enum {
     ENGINE_DOOM = 0,
     ENGINE_HERETIC = 1,
+    ENGINE_HEXEN = 2,
 } game_engine_t;
 
 typedef struct {
@@ -451,6 +452,9 @@ static const known_iwad_t known_iwads[] = {
     // Heretic IWADs
     {"heretic.wad",   ENGINE_HERETIC},
     {"heretic1.wad",  ENGINE_HERETIC},
+    // Hexen IWADs
+    {"hexen.wad",     ENGINE_HEXEN},
+    {"hexdd.wad",     ENGINE_HEXEN},
 };
 
 // Number of known IWADs
@@ -631,6 +635,8 @@ void DG_StartScreen(void) {
         {"hacx.wad",     "HACX (hacx.wad)",                ENGINE_DOOM},
         {"heretic.wad",  "HERETIC (heretic.wad)",          ENGINE_HERETIC},
         {"heretic1.wad", "HERETIC SHAREWARE",              ENGINE_HERETIC},
+        {"hexen.wad",    "HEXEN (hexen.wad)",              ENGINE_HEXEN},
+        {"hexdd.wad",    "HEXEN: DEATHKINGS",              ENGINE_HEXEN},
     };
 
     const int panel_x = 24;
@@ -804,6 +810,8 @@ void DG_StartScreen(void) {
                 static char *new_argv[4];
                 if (available[selected]->engine == ENGINE_DOOM) {
                     new_argv[0] = (char *)"doom";
+                } else if (available[selected]->engine == ENGINE_HEXEN) {
+                    new_argv[0] = (char *)"hexen";
                 } else {
                     new_argv[0] = (char *)"heretic";
                 }
@@ -888,8 +896,9 @@ void *I_Realloc(void *ptr, size_t size) {
 }
 
 void I_Quit(void) {
-    printf("I_Quit\n");
-    watchdog_enable(1, 1);
+    printf("I_Quit: rebooting to WAD selector...\n");
+    // Clean reboot back to the start screen
+    watchdog_reboot(0, 0, 10);  // Reboot in 10ms
     while(1) tight_loop_contents();
 }
 
