@@ -831,7 +831,7 @@ void R_FillBackScreen (void)
 	
     if (background_buffer == NULL)
     {
-        background_buffer = Z_Malloc(SCREENWIDTH * (SCREENHEIGHT - SBARHEIGHT) * sizeof(*background_buffer),
+        background_buffer = Z_Malloc(SCREENWIDTH * SCREENHEIGHT * sizeof(*background_buffer),
                                      PU_STATIC, NULL);
     }
 

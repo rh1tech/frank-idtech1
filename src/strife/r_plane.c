@@ -354,23 +354,23 @@ R_MakeSpans
 {
     while (t1 < t2 && t1<=b1)
     {
-	R_MapPlane (t1,spanstart[t1],x-1);
+	if (t1 >= 0 && t1 < SCREENHEIGHT) R_MapPlane (t1,spanstart[t1],x-1);
 	t1++;
     }
     while (b1 > b2 && b1>=t1)
     {
-	R_MapPlane (b1,spanstart[b1],x-1);
+	if (b1 >= 0 && b1 < SCREENHEIGHT) R_MapPlane (b1,spanstart[b1],x-1);
 	b1--;
     }
 	
     while (t2 < t1 && t2<=b2)
     {
-	spanstart[t2] = x;
+	if (t2 >= 0 && t2 < SCREENHEIGHT) spanstart[t2] = x;
 	t2++;
     }
     while (b2 > b1 && b2>=t2)
     {
-	spanstart[b2] = x;
+	if (b2 >= 0 && b2 < SCREENHEIGHT) spanstart[b2] = x;
 	b2--;
     }
 }

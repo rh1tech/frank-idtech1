@@ -187,8 +187,26 @@ static inline bool is_channel_playing(int channel) {
     return channels[channel].decompressed_size != 0;
 }
 
+static volatile boolean stopping_all_channels = false;
+
 static inline void stop_channel(int channel) {
     channels[channel].decompressed_size = 0;
+    channels[channel].data = NULL;
+    channels[channel].data_end = NULL;
+}
+
+// Stop all sound channels and wait for DMA to drain
+// Must be called before freeing zone memory that contains sound data
+void I_Pico_StopAllAndDrain(void) {
+    stopping_all_channels = true;
+    __dmb();
+    for (int i = 0; i < NUM_SOUND_CHANNELS; i++) {
+        stop_channel(i);
+    }
+    // Wait for 2 DMA buffer periods to ensure any in-flight mix completes
+    // At 49716 Hz with 1421 samples/buffer, that's ~57ms
+    sleep_ms(60);
+    stopping_all_channels = false;
 }
 
 static inline uint16_t read_le16(const uint8_t *p) {
@@ -273,7 +291,7 @@ int adpcm_decode_block_s8(int8_t *outbuf, const uint8_t *inbuf, int inbufsize)
 }
 
 static void decompress_buffer(pico_channel_t *channel) {
-    if (channel->data == channel->data_end) {
+    if (channel->data == NULL || channel->data == channel->data_end) {
         channel->decompressed_size = 0;
     } else {
         if (channel->is_adpcm) {
@@ -437,6 +455,12 @@ static boolean I_Pico_SoundIsPlaying(int channel)
 
 static void mix_audio_buffer(audio_buffer_t *buffer)
 {
+    // If we're draining, output silence only
+    if (stopping_all_channels) {
+        memset(buffer->buffer->bytes, 0, buffer->buffer->size);
+        return;
+    }
+
     if (music_generator) {
         music_generator(buffer);
     } else {

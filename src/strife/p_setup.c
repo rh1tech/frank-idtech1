@@ -716,6 +716,9 @@ P_SetupLevel
 
     // Make sure all sounds are stopped before Z_FreeTags.
     S_Start ();
+    // Wait for audio DMA to finish any in-flight buffer that may reference zone data
+    extern void I_Pico_StopAllAndDrain(void);
+    I_Pico_StopAllAndDrain();
 
     
 #if 0 // UNUSED

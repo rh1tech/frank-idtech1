@@ -304,7 +304,7 @@ void D_Display (void)
     if (gamestate == GS_LEVEL && oldgamestate != GS_LEVEL)
     {
         viewactivestate = false;        // view was not active
-        R_FillBackScreen ();    // draw the pattern into the back screen
+        // R_FillBackScreen ();    // DISABLED FOR DEBUG
     }
 
     // see if the border needs to be updated to the screen
@@ -317,7 +317,7 @@ void D_Display (void)
         }
         if (borderdrawcount)
         {
-            R_DrawViewBorder ();    // erase old menu stuff
+            // R_DrawViewBorder ();    // DISABLED FOR DEBUG
             borderdrawcount--;
         }
 

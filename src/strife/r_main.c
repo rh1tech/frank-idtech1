@@ -913,32 +913,33 @@ void R_SetupFrame (player_t* player)
 //
 // R_RenderView
 //
+static int rpv_dbg = 0;
 void R_RenderPlayerView (player_t* player)
-{	
+{
+    if (rpv_dbg < 5) printf("[RPV%d] setup\n", rpv_dbg);
     R_SetupFrame (player);
 
-    // Clear buffers.
     R_ClearClipSegs ();
     R_ClearDrawSegs ();
     R_ClearPlanes ();
     R_ClearSprites ();
-    
-    // check for new console commands.
+
     NetUpdate ();
 
-    // The head node is the last node output.
+    if (rpv_dbg < 5) printf("[RPV%d] bsp\n", rpv_dbg);
     R_RenderBSPNode (numnodes-1);
-    
-    // Check for new console commands.
+
     NetUpdate ();
-    
+
+    if (rpv_dbg < 5) printf("[RPV%d] planes\n", rpv_dbg);
     R_DrawPlanes ();
-    
-    // Check for new console commands.
+
     NetUpdate ();
-    
+
+    if (rpv_dbg < 5) printf("[RPV%d] masked\n", rpv_dbg);
     R_DrawMasked ();
 
-    // Check for new console commands.
-    NetUpdate ();				
+    NetUpdate ();
+    if (rpv_dbg < 5) printf("[RPV%d] done\n", rpv_dbg);
+    rpv_dbg++;
 }

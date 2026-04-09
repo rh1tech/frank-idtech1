@@ -621,10 +621,12 @@ R_StoreWallRange
 	{
 	    // masked midtexture
 	    maskedtexture = true;
-	    if (lastopening + (rw_stopx - rw_x) >= openings + MAXOPENINGS)
-		return;  // openings overflow protection
-	    ds_p->maskedtexturecol = maskedtexturecol = lastopening - rw_x;
-	    lastopening += rw_stopx - rw_x;
+	    if (lastopening + (rw_stopx - rw_x) < openings + MAXOPENINGS) {
+		ds_p->maskedtexturecol = maskedtexturecol = lastopening - rw_x;
+		lastopening += rw_stopx - rw_x;
+	    } else {
+		maskedtexture = false;
+	    }
 	}
     }
     
@@ -730,23 +732,26 @@ R_StoreWallRange
 
     
     // save sprite clipping info
-    if ( ((ds_p->silhouette & SIL_TOP) || maskedtexture)
-	 && !ds_p->sprtopclip)
     {
-	if (lastopening + (rw_stopx - start) < openings + MAXOPENINGS) {
-	    memcpy (lastopening, ceilingclip+start, 2*(rw_stopx-start));
-	    ds_p->sprtopclip = lastopening - start;
-	    lastopening += rw_stopx - start;
-	}
-    }
+	int avail = (openings + MAXOPENINGS) - lastopening;
+	int need = rw_stopx - start;
 
-    if ( ((ds_p->silhouette & SIL_BOTTOM) || maskedtexture)
-	 && !ds_p->sprbottomclip)
-    {
-	if (lastopening + (rw_stopx - start) < openings + MAXOPENINGS) {
-	    memcpy (lastopening, floorclip+start, 2*(rw_stopx-start));
+	if ( ((ds_p->silhouette & SIL_TOP) || maskedtexture)
+	     && !ds_p->sprtopclip && avail >= need)
+	{
+	    memcpy (lastopening, ceilingclip+start, 2*need);
+	    ds_p->sprtopclip = lastopening - start;
+	    lastopening += need;
+	}
+
+	avail = (openings + MAXOPENINGS) - lastopening;
+
+	if ( ((ds_p->silhouette & SIL_BOTTOM) || maskedtexture)
+	     && !ds_p->sprbottomclip && avail >= need)
+	{
+	    memcpy (lastopening, floorclip+start, 2*need);
 	    ds_p->sprbottomclip = lastopening - start;
-	    lastopening += rw_stopx - start;
+	    lastopening += need;
 	}
     }
 
