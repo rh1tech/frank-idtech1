@@ -287,7 +287,7 @@ static void decompress_buffer(pico_channel_t *channel) {
             assert(channel->decompressed_size && channel->decompressed_size <= sizeof(channel->decompressed));
             const uint8_t *src = channel->data;
             for (int i = 0; i < block_size; ++i) {
-                channel->decompressed[i] = (int8_t)src[i];
+                channel->decompressed[i] = (int8_t)(src[i] - 128);
             }
             channel->data += block_size;
         }
@@ -397,8 +397,8 @@ static void I_Pico_UpdateSoundParams(int handle, int vol, int sep)
     right = ((sep) * vol) / 127;
 
     // Scale down SFX volume to avoid clipping when mixing on top of music
-    left /= 16;
-    right /= 16;
+    left /= 2;
+    right /= 2;
 
     if (left < 0) left = 0;
     else if ( left > 255) left = 255;

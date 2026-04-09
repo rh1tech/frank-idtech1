@@ -889,7 +889,7 @@ void D_DoomMain(void)
     }
     else
     {
-        M_SetConfigDir(NULL);
+        M_SetConfigDir("idtech1/");
     }
 
     // Load defaults before initing other systems
