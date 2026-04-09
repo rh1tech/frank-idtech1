@@ -353,26 +353,86 @@ const char *I_NextGlob(glob_t *glob)
 
 #else /* #ifdef NO_DIRENT_IMPLEMENTATION */
 
-#warning No native implementation of file globbing.
+// FatFS-based glob implementation for embedded platforms
+#include "ff.h"
+#include <stdlib.h>
+#include <string.h>
 
-glob_t *I_StartGlob(const char *directory, const char *glob, int flags)
+extern void *psram_malloc(size_t size);
+
+struct glob_s
 {
-    return NULL;
+    DIR fatfs_dir;
+    char *directory;
+    char *glob_pattern;
+    char result_buf[256];
+    int dir_open;
+};
+
+static int glob_match(const char *pattern, const char *name)
+{
+    // Simple wildcard matching: '*' matches everything
+    if (strcmp(pattern, "*") == 0)
+        return 1;
+    // Could add more patterns if needed
+    return strcasecmp(pattern, name) == 0;
+}
+
+glob_t *I_StartGlob(const char *directory, const char *glob_pat, int flags)
+{
+    glob_t *result = psram_malloc(sizeof(glob_t));
+    if (!result) return NULL;
+
+    memset(result, 0, sizeof(glob_t));
+
+    FRESULT fr = f_opendir(&result->fatfs_dir, directory);
+    if (fr != FR_OK)
+        return NULL;
+
+    result->dir_open = 1;
+    result->directory = psram_malloc(strlen(directory) + 1);
+    if (result->directory)
+        strcpy(result->directory, directory);
+    result->glob_pattern = psram_malloc(strlen(glob_pat) + 1);
+    if (result->glob_pattern)
+        strcpy(result->glob_pattern, glob_pat);
+
+    return result;
 }
 
 void I_EndGlob(glob_t *glob)
 {
+    if (glob && glob->dir_open)
+        f_closedir(&glob->fatfs_dir);
+    // psram_malloc doesn't support free - just leak (small)
 }
 
 const char *I_NextGlob(glob_t *glob)
 {
-    return NULL;
+    if (!glob || !glob->dir_open)
+        return NULL;
+
+    FILINFO fno;
+    for (;;)
+    {
+        FRESULT fr = f_readdir(&glob->fatfs_dir, &fno);
+        if (fr != FR_OK || fno.fname[0] == 0)
+            return NULL;
+
+        if (glob->glob_pattern && !glob_match(glob->glob_pattern, fno.fname))
+            continue;
+
+        // Build full path
+        snprintf(glob->result_buf, sizeof(glob->result_buf),
+                 "%s/%s", glob->directory, fno.fname);
+        return glob->result_buf;
+    }
 }
 
 #endif /* #ifdef NO_DIRENT_IMPLEMENTATION */
 
 
-glob_t *I_StartMultiGlob(const char *directory, int flags, const char *glob, ...)
+glob_t *I_StartMultiGlob(const char *directory, int flags, const char *glob_pat, ...)
 {
-    return NULL;
+    return I_StartGlob(directory, glob_pat ? glob_pat : "*", flags);
 }
