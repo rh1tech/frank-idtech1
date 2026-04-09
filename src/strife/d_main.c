@@ -1893,7 +1893,7 @@ void D_DoomMain (void)
     // fraggle 20130405: I_InitTimer is needed here for the netgame
     // startup. Start low-level sound init here too.
     I_InitTimer();
-    I_InitSound(false);  // Strife does not use "DS" prefix for sound lumps
+    I_InitSound(true);  // Strife uses "DS" prefix for sound lumps (like Doom)
     I_InitMusic();
 
     if(devparm) // [STRIFE]
