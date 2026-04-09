@@ -29,11 +29,9 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include "v_video.h"
 #include "m_argv.h"
 #include "d_event.h"
-#include "d_main.h"
 #include "i_video.h"
 #include "i_system.h"
 #include "z_zone.h"
-#include "doomstat.h"
 
 #include "tables.h"
 #include "doomkeys.h"
@@ -46,6 +44,7 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 #include <fcntl.h>
 
 #include <stdarg.h>
+#include <string.h>
 
 #include <sys/types.h>
 
@@ -320,31 +319,6 @@ void I_UpdateNoBlit (void)
 {
 }
 
-// Track previous game state for detecting transitions
-static gamestate_t prev_gamestate = GS_LEVEL;
-
-// Fill a region of the output buffer with black (using palette color 0)
-static void fill_output_black(unsigned char *dest, int num_lines)
-{
-    int y, x;
-    struct color c = colors[0];  // Palette index 0 (black)
-    
-    for (y = 0; y < num_lines; y++) {
-        for (x = 0; x < SCREENWIDTH; x++) {
-            if (s_Fb.bits_per_pixel == 16) {
-                uint16_t p = ((c.r & 0xF8) << 8) | ((c.g & 0xFC) << 3) | (c.b >> 3);
-                *(uint16_t *)dest = p;
-                dest += 2;
-            } else if (s_Fb.bits_per_pixel == 32) {
-                uint32_t pix = (c.r << s_Fb.red.offset) | (c.g << s_Fb.green.offset) | (c.b << s_Fb.blue.offset);
-                *(uint32_t *)dest = pix;
-                dest += 4;
-            } else {
-                *dest++ = 0;
-            }
-        }
-    }
-}
 
 //
 // I_FinishUpdate
@@ -376,23 +350,7 @@ void I_FinishUpdate (void)
     line_in  = (unsigned char *) I_VideoBuffer;
     line_out = (unsigned char *) DG_ScreenBuffer;
     
-    // When not in gameplay, we need to center the 200-line content on 240-line display
-    if (gamestate != GS_LEVEL) {
-        // On transition from gameplay, fill the top and bottom margins with black
-        if (prev_gamestate == GS_LEVEL) {
-            // Fill top 20 lines with black
-            fill_output_black((unsigned char *)DG_ScreenBuffer, 20);
-            // Fill bottom 20 lines with black (starting at line 220)
-            fill_output_black((unsigned char *)DG_ScreenBuffer + (220 * SCREENWIDTH * s_Fb.bits_per_pixel / 8), 20);
-        }
-        
-        // Offset output by 20 lines to center the content
-        line_out += (20 * SCREENWIDTH * s_Fb.bits_per_pixel / 8);
-        y = 200;  // Only copy Doom's 200 rendered lines
-    } else {
-        y = SCREENHEIGHT;  // Copy all 240 lines during gameplay (includes status bar)
-    }
-    prev_gamestate = gamestate;
+    y = SCREENHEIGHT;  // Copy all lines (240 for both Doom and Heretic)
 
     while (y--)
     {

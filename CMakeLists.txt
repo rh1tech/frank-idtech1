@@ -72,7 +72,7 @@ target_compile_options(drivers PRIVATE -Ofast)
 target_link_libraries(drivers pico_stdlib hardware_dma hardware_pio hardware_spi)
 
 # =============================================================================
-# Game Build (selected by GAME variable)
+# Multi-game build: all engines in one binary with symbol namespacing
 # =============================================================================
 
 # Common shared sources
@@ -104,54 +104,8 @@ list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*m_misc\\.c$")
 # Exclude network dedicated server (not used on embedded)
 list(FILTER COMMON_SOURCES EXCLUDE REGEX ".*net_dedicated\\.c$")
 
-# Game-specific sources
-file(GLOB GAME_SOURCES src/${GAME}/*.c)
-
-# Pico platform + OPL sources
-set(PICO_SOURCES
-    src/pico/i_picosound.c
-    src/pico/i_oplmusic.c
-    src/midifile.c
-    src/opl/emu8950.c
-    src/opl/emuadpcm.c
-    src/opl/opl_api.c
-    src/opl/opl_pico.c
-    src/opl/slot_render.cpp
-)
-
-add_executable(frank-idtech1
-    src/main.c
-    src/doomgeneric_rp2350.c
-    src/doomgeneric_fatfs/w_file_fatfs.c
-    src/doomgeneric_fatfs/m_misc_fatfs.c
-    src/doomgeneric_fatfs/stdio_fatfs.c
-    src/pico/audio.c
-    ${COMMON_SOURCES}
-    ${GAME_SOURCES}
-    ${PICO_SOURCES}
-)
-
-# Generate PIO header for I2S audio (must be after add_executable)
-add_subdirectory(drivers/audio)
-
-target_include_directories(frank-idtech1 PRIVATE
-    src
-    src/${GAME}
-    src/common
-    src/pico
-    src/fatfs
-    src/opl
-    drivers
-    drivers/sdcard
-    drivers/ps2mouse
-)
-
-target_compile_options(frank-idtech1 PRIVATE -Ofast)
-
-target_compile_definitions(frank-idtech1 PRIVATE
-    # Game selection
-    GAME_${GAME_UPPER}=1
-    ${GAME_UPPER}=1
+# Shared compile definitions for all game targets
+set(SHARED_GAME_DEFS
     BOARD_${BOARD_VARIANT}
     CPU_CLOCK_MHZ=${CPU_SPEED}
     CPU_VOLTAGE=${CPU_VOLTAGE}
@@ -187,7 +141,80 @@ target_compile_definitions(frank-idtech1 PRIVATE
     FRANK_VERSION="${FRANK_VERSION}"
 )
 
-target_link_options(frank-idtech1 PRIVATE -Wl,-Map=frank-idtech1.map)
+# Game-specific sources (each game compiled with symbol prefix)
+file(GLOB DOOM_GAME_SOURCES src/doom/*.c)
+file(GLOB HERETIC_GAME_SOURCES src/heretic/*.c)
+
+# Shared game include/compile setup (avoids linking pico_stdlib into OBJECT libs)
+set(GAME_INCLUDE_DIRS
+    src src/common src/pico src/fatfs src/opl
+    drivers drivers/sdcard drivers/ps2mouse
+    $<TARGET_PROPERTY:pico_stdlib,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+# Doom object library (namespaced with DOOM_ prefix)
+add_library(doom_game OBJECT ${DOOM_GAME_SOURCES})
+target_include_directories(doom_game PRIVATE src/doom ${GAME_INCLUDE_DIRS})
+target_compile_options(doom_game PRIVATE -Ofast -fdata-sections -ffunction-sections -include ${CMAKE_SOURCE_DIR}/src/doom/doom_prefix.h)
+target_compile_definitions(doom_game PRIVATE GAME_DOOM=1 DOOM=1 ${SHARED_GAME_DEFS}
+    $<TARGET_PROPERTY:pico_stdlib,INTERFACE_COMPILE_DEFINITIONS>)
+
+# Heretic object library (namespaced with HERETIC_ prefix)
+add_library(heretic_game OBJECT ${HERETIC_GAME_SOURCES})
+target_include_directories(heretic_game PRIVATE src/heretic ${GAME_INCLUDE_DIRS})
+target_compile_options(heretic_game PRIVATE -Ofast -fdata-sections -ffunction-sections -include ${CMAKE_SOURCE_DIR}/src/heretic/heretic_prefix.h)
+target_compile_definitions(heretic_game PRIVATE GAME_HERETIC=1 HERETIC=1 ${SHARED_GAME_DEFS}
+    $<TARGET_PROPERTY:pico_stdlib,INTERFACE_COMPILE_DEFINITIONS>)
+
+# Pico platform + OPL sources
+set(PICO_SOURCES
+    src/pico/i_picosound.c
+    src/pico/i_oplmusic.c
+    src/midifile.c
+    src/opl/emu8950.c
+    src/opl/emuadpcm.c
+    src/opl/opl_api.c
+    src/opl/opl_pico.c
+    src/opl/slot_render.cpp
+)
+
+add_executable(frank-idtech1
+    src/main.c
+    src/doomgeneric_rp2350.c
+    src/doomgeneric_fatfs/w_file_fatfs.c
+    src/doomgeneric_fatfs/m_misc_fatfs.c
+    src/doomgeneric_fatfs/stdio_fatfs.c
+    src/pico/audio.c
+    ${COMMON_SOURCES}
+    ${PICO_SOURCES}
+    $<TARGET_OBJECTS:doom_game>
+    $<TARGET_OBJECTS:heretic_game>
+)
+
+# Custom linker script with BSS OVERLAY (both games share same RAM region)
+pico_set_linker_script(frank-idtech1 ${CMAKE_SOURCE_DIR}/memmap_multigame.ld)
+
+# Generate PIO header for I2S audio (must be after add_executable)
+add_subdirectory(drivers/audio)
+
+target_include_directories(frank-idtech1 PRIVATE
+    src
+    src/common
+    src/pico
+    src/fatfs
+    src/opl
+    drivers
+    drivers/sdcard
+    drivers/ps2mouse
+)
+
+target_compile_options(frank-idtech1 PRIVATE -Ofast)
+
+target_compile_definitions(frank-idtech1 PRIVATE
+    ${SHARED_GAME_DEFS}
+)
+
+target_link_options(frank-idtech1 PRIVATE -Wl,-Map=frank-idtech1.map -Wl,--gc-sections)
 
 # Set peripheral pins based on board variant
 if(BOARD_VARIANT STREQUAL "M1")
@@ -232,7 +259,7 @@ target_link_libraries(frank-idtech1
     drivers
 )
 
-# Wrap stdio
+# Wrap stdio and memory allocation (redirect to PSRAM/FatFS)
 target_link_options(frank-idtech1 PRIVATE
     -Wl,--wrap=fopen
     -Wl,--wrap=fclose

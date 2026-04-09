@@ -44,9 +44,16 @@ static void fill_rect(int x, int y, int w, int h, pixel_t color) {
     }
 }
 
+// Game engine type for each IWAD
+typedef enum {
+    ENGINE_DOOM = 0,
+    ENGINE_HERETIC = 1,
+} game_engine_t;
+
 typedef struct {
     const char *filename;
     const char *label;
+    game_engine_t engine;
 } iwad_entry_t;
 
 static int max_label_width_5x7(const iwad_entry_t *const *entries, int entry_count, int scale) {
@@ -422,26 +429,32 @@ static bool has_wad_extension(const char *name) {
          && ascii_tolower((unsigned char)name[n - 1]) == 'd');
 }
 
-// Game-specific IWAD configuration
-#if defined(GAME_DOOM)
-static const char *const known_iwads[] = {
-    "doom2.wad", "doom.wad", "doom1.wad", "plutonia.wad", "tnt.wad",
-    "doom2f.wad", "freedoom2.wad", "freedoom1.wad", "freedm.wad",
-    "chex.wad", "hacx.wad",
+// All known IWADs across all supported games
+typedef struct {
+    const char *filename;
+    game_engine_t engine;
+} known_iwad_t;
+
+static const known_iwad_t known_iwads[] = {
+    // Doom IWADs
+    {"doom2.wad",     ENGINE_DOOM},
+    {"doom.wad",      ENGINE_DOOM},
+    {"doom1.wad",     ENGINE_DOOM},
+    {"plutonia.wad",  ENGINE_DOOM},
+    {"tnt.wad",       ENGINE_DOOM},
+    {"doom2f.wad",    ENGINE_DOOM},
+    {"freedoom2.wad", ENGINE_DOOM},
+    {"freedoom1.wad", ENGINE_DOOM},
+    {"freedm.wad",    ENGINE_DOOM},
+    {"chex.wad",      ENGINE_DOOM},
+    {"hacx.wad",      ENGINE_DOOM},
+    // Heretic IWADs
+    {"heretic.wad",   ENGINE_HERETIC},
+    {"heretic1.wad",  ENGINE_HERETIC},
 };
-#elif defined(GAME_HEXEN)
-static const char *const known_iwads[] = {
-    "hexen.wad",
-};
-#elif defined(GAME_STRIFE)
-static const char *const known_iwads[] = {
-    "strife1.wad",
-};
-#else /* GAME_HERETIC (default) */
-static const char *const known_iwads[] = {
-    "heretic.wad", "heretic1.wad",
-};
-#endif
+
+// Number of known IWADs
+#define NUM_KNOWN_IWADS (sizeof(known_iwads) / sizeof(known_iwads[0]))
 
 static void print_available_wads_to_console(void) {
     printf("\n=== WAD scan (/ and /idtech1) ===\n");
@@ -449,16 +462,16 @@ static void print_available_wads_to_console(void) {
 
     printf("Compatible IWAD filenames:\n");
     int compatible_found = 0;
-    for (size_t i = 0; i < sizeof(known_iwads) / sizeof(known_iwads[0]); ++i) {
+    for (size_t i = 0; i < NUM_KNOWN_IWADS; ++i) {
         FILINFO info;
-        if (f_stat(known_iwads[i], &info) == FR_OK) {
-            printf("  [FOUND] %s (root)\n", known_iwads[i]);
+        if (f_stat(known_iwads[i].filename, &info) == FR_OK) {
+            printf("  [FOUND] %s (root)\n", known_iwads[i].filename);
             compatible_found++;
         }
         char subpath[64];
-        snprintf(subpath, sizeof(subpath), "idtech1/%s", known_iwads[i]);
+        snprintf(subpath, sizeof(subpath), "idtech1/%s", known_iwads[i].filename);
         if (f_stat(subpath, &info) == FR_OK) {
-            printf("  [FOUND] %s (idtech1/)\n", known_iwads[i]);
+            printf("  [FOUND] %s (idtech1/)\n", known_iwads[i].filename);
             compatible_found++;
         }
     }
@@ -485,8 +498,8 @@ static void print_available_wads_to_console(void) {
             if (!has_wad_extension(fno.fname)) continue;
 
             bool known = false;
-            for (size_t i = 0; i < sizeof(known_iwads) / sizeof(known_iwads[0]); ++i) {
-                if (ascii_strcasecmp(fno.fname, known_iwads[i]) == 0) { known = true; break; }
+            for (size_t i = 0; i < NUM_KNOWN_IWADS; ++i) {
+                if (ascii_strcasecmp(fno.fname, known_iwads[i].filename) == 0) { known = true; break; }
             }
             if (known) continue;
 
@@ -575,36 +588,13 @@ void DG_StartScreen(void) {
     // Reserved for the loading window text/border (keep bright even after we dim UI text).
     graphics_set_palette(20, 0xFFFFFF);
 
-    // Background palette (2..17): game-specific theme colors.
-#if defined(GAME_DOOM)
+    // Background palette (2..17): multi-game theme (neutral blue-green).
     static const uint32_t bg_pal[16] = {
-        0x050101, 0x080202, 0x0B0303, 0x0E0404,
-        0x120505, 0x160606, 0x1A0707, 0x1E0808,
-        0x220909, 0x260A0A, 0x2A0B0B, 0x2E0C0C,
-        0x330D0D, 0x380E0E, 0x3D0F0F, 0x421010,
+        0x010305, 0x020508, 0x03070B, 0x04090E,
+        0x050B12, 0x060D16, 0x070F1A, 0x08111E,
+        0x091322, 0x0A1526, 0x0B172A, 0x0C192E,
+        0x0D1B33, 0x0E1D38, 0x0F1F3D, 0x102142,
     };
-#elif defined(GAME_HEXEN)
-    static const uint32_t bg_pal[16] = {
-        0x010105, 0x020208, 0x03030B, 0x04040E,
-        0x050512, 0x060616, 0x07071A, 0x08081E,
-        0x090922, 0x0A0A26, 0x0B0B2A, 0x0C0C2E,
-        0x0D0D33, 0x0E0E38, 0x0F0F3D, 0x101042,
-    };
-#elif defined(GAME_STRIFE)
-    static const uint32_t bg_pal[16] = {
-        0x050301, 0x080502, 0x0B0703, 0x0E0904,
-        0x120B05, 0x160D06, 0x1A0F07, 0x1E1108,
-        0x221309, 0x26150A, 0x2A170B, 0x2E190C,
-        0x331B0D, 0x381D0E, 0x3D1F0F, 0x422110,
-    };
-#else /* GAME_HERETIC */
-    static const uint32_t bg_pal[16] = {
-        0x000501, 0x010802, 0x010B03, 0x010E04,
-        0x011205, 0x021606, 0x021A07, 0x031E08,
-        0x032209, 0x04260A, 0x042A0B, 0x052E0C,
-        0x05330D, 0x06380E, 0x063D0F, 0x074210,
-    };
-#endif
     for (int i = 0; i < 16; ++i) {
         graphics_set_palette(2 + i, bg_pal[i]);
     }
@@ -627,34 +617,21 @@ void DG_StartScreen(void) {
     }
     memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t));
 
-    // Game-specific IWADs for selection menu.
-#if defined(GAME_DOOM)
+    // All IWADs for selection menu (Doom + Heretic).
     static const iwad_entry_t game_iwads[] = {
-        {"doom2.wad",    "DOOM II (doom2.wad)"},
-        {"doom.wad",     "DOOM (doom.wad)"},
-        {"doom1.wad",    "DOOM SHAREWARE (doom1.wad)"},
-        {"plutonia.wad", "FINAL DOOM: PLUTONIA (plutonia.wad)"},
-        {"tnt.wad",      "FINAL DOOM: TNT (tnt.wad)"},
-        {"freedoom2.wad","FREEDOOM PHASE 2 (freedoom2.wad)"},
-        {"freedoom1.wad","FREEDOOM PHASE 1 (freedoom1.wad)"},
-        {"freedm.wad",   "FREEDM (freedm.wad)"},
-        {"chex.wad",     "CHEX QUEST (chex.wad)"},
-        {"hacx.wad",     "HACX (hacx.wad)"},
+        {"doom2.wad",    "DOOM II (doom2.wad)",            ENGINE_DOOM},
+        {"doom.wad",     "DOOM (doom.wad)",                ENGINE_DOOM},
+        {"doom1.wad",    "DOOM SHAREWARE (doom1.wad)",     ENGINE_DOOM},
+        {"plutonia.wad", "FINAL DOOM: PLUTONIA",           ENGINE_DOOM},
+        {"tnt.wad",      "FINAL DOOM: TNT (tnt.wad)",     ENGINE_DOOM},
+        {"freedoom2.wad","FREEDOOM PHASE 2",               ENGINE_DOOM},
+        {"freedoom1.wad","FREEDOOM PHASE 1",               ENGINE_DOOM},
+        {"freedm.wad",   "FREEDM (freedm.wad)",           ENGINE_DOOM},
+        {"chex.wad",     "CHEX QUEST (chex.wad)",          ENGINE_DOOM},
+        {"hacx.wad",     "HACX (hacx.wad)",                ENGINE_DOOM},
+        {"heretic.wad",  "HERETIC (heretic.wad)",          ENGINE_HERETIC},
+        {"heretic1.wad", "HERETIC SHAREWARE",              ENGINE_HERETIC},
     };
-#elif defined(GAME_HEXEN)
-    static const iwad_entry_t game_iwads[] = {
-        {"hexen.wad",    "HEXEN (hexen.wad)"},
-    };
-#elif defined(GAME_STRIFE)
-    static const iwad_entry_t game_iwads[] = {
-        {"strife1.wad",  "STRIFE (strife1.wad)"},
-    };
-#else /* GAME_HERETIC */
-    static const iwad_entry_t game_iwads[] = {
-        {"heretic.wad",  "HERETIC (heretic.wad)"},
-        {"heretic1.wad", "HERETIC SHAREWARE (heretic1.wad)"},
-    };
-#endif
 
     const int panel_x = 24;
     const int panel_y = 24;
@@ -692,15 +669,7 @@ void DG_StartScreen(void) {
 #define FRANK_VERSION "?"
 #endif
 
-#if defined(GAME_DOOM)
-    const char *title_left = "FRANK IDTECH1: DOOM";
-#elif defined(GAME_HEXEN)
-    const char *title_left = "FRANK IDTECH1: HEXEN";
-#elif defined(GAME_STRIFE)
-    const char *title_left = "FRANK IDTECH1: STRIFE";
-#else
-    const char *title_left = "FRANK IDTECH1: HERETIC";
-#endif
+    const char *title_left = "FRANK IDTECH1";
     char title_right[96];
     snprintf(title_right, sizeof(title_right), " by Mikhail Matveev v%s", FRANK_VERSION);
 
@@ -828,16 +797,16 @@ void DG_StartScreen(void) {
 
                 draw_text_5x7(win_x + pad_x, win_y + pad_y, msg, 20);
 
+                // Set the active game engine based on the selected WAD
+                extern int active_game;
+                active_game = (int)available[selected]->engine;
+
                 static char *new_argv[4];
-#if defined(GAME_DOOM)
-                new_argv[0] = (char *)"doom";
-#elif defined(GAME_HEXEN)
-                new_argv[0] = (char *)"hexen";
-#elif defined(GAME_STRIFE)
-                new_argv[0] = (char *)"strife";
-#else
-                new_argv[0] = (char *)"heretic";
-#endif
+                if (available[selected]->engine == ENGINE_DOOM) {
+                    new_argv[0] = (char *)"doom";
+                } else {
+                    new_argv[0] = (char *)"heretic";
+                }
                 new_argv[1] = (char *)"-iwad";
                 new_argv[2] = (char *)available[selected]->filename;
                 new_argv[3] = NULL;
@@ -911,7 +880,7 @@ void I_Error(const char *error, ...) {
 }
 
 void *I_Realloc(void *ptr, size_t size) {
-    void *new_ptr = realloc(ptr, size);
+    void *new_ptr = psram_realloc(ptr, size);
     if (size != 0 && new_ptr == NULL) {
         I_Error("I_Realloc: failed on reallocation of %zu bytes", size);
     }
@@ -976,3 +945,4 @@ boolean I_GetMemoryValue(unsigned int offset, void *value, int size)
 {
     return false;
 }
+

@@ -197,7 +197,11 @@ wad_file_t *W_AddFile (const char *filename)
     }
 
     // Increase size of numlumps array to accomodate the new file.
-    filelumps = calloc(numfilelumps, sizeof(lumpinfo_t));
+    {
+        size_t alloc_size = numfilelumps * sizeof(lumpinfo_t);
+        filelumps = Z_Malloc(alloc_size, PU_STATIC, NULL);
+        memset(filelumps, 0, alloc_size);
+    }
     if (filelumps == NULL)
     {
         W_CloseFile(wad_file);
