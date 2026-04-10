@@ -445,6 +445,9 @@ void doomgeneric_Tick(void)
 
     S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
 
+    // Flush deferred config save (from menu close)
+    M_CheckDeferredSave();
+
     // Update display, next frame, with current state if no profiling is on
     if (screenvisible && !nodrawers)
     {

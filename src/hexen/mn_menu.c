@@ -27,6 +27,7 @@
 #include "i_swap.h"
 #include "i_video.h"
 #include "m_controls.h"
+#include "m_config.h"
 #include "m_misc.h"
 #include "p_local.h"
 #include "r_local.h"
@@ -1876,6 +1877,17 @@ void MN_ActivateMenu(void)
 //
 //---------------------------------------------------------------------------
 
+static boolean mn_save_defaults_pending = false;
+
+void MN_CheckDeferredSave(void)
+{
+    if (mn_save_defaults_pending)
+    {
+        mn_save_defaults_pending = false;
+        M_SaveDefaults();
+    }
+}
+
 void MN_DeactivateMenu(void)
 {
     if (CurrentMenu != NULL)
@@ -1893,6 +1905,8 @@ void MN_DeactivateMenu(void)
     }
     S_StartSound(NULL, SFX_PLATFORM_STOP);
     P_ClearMessage(&players[consoleplayer]);
+
+    mn_save_defaults_pending = true;
 }
 
 //---------------------------------------------------------------------------

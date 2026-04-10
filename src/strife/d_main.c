@@ -538,6 +538,8 @@ void doomgeneric_Tick(void)
 
     S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
 
+    M_CheckDeferredSave();
+
     // Update display, next frame, with current state.
     if (screenvisible)
         D_Display ();

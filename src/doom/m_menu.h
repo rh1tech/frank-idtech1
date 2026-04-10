@@ -52,6 +52,9 @@ void M_Init (void);
 void M_StartControlPanel (void);
 
 
+// Flush any deferred config save (call from game loop)
+void M_CheckDeferredSave(void);
+
 extern int detailLevel;
 extern int screenblocks;
 

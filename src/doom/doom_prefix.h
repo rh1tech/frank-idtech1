@@ -107,6 +107,7 @@
 #define G_TimeDemo DOOM_G_TimeDemo
 #define G_WorldDone DOOM_G_WorldDone
 #define G_WriteDemoTiccmd DOOM_G_WriteDemoTiccmd
+#define M_CheckDeferredSave DOOM_M_CheckDeferredSave
 #define M_ClearRandom DOOM_M_ClearRandom
 #define M_Random DOOM_M_Random
 #define PIT_AddLineIntercepts DOOM_PIT_AddLineIntercepts

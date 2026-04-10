@@ -436,6 +436,7 @@
 #define LeaveMap HEXEN_LeaveMap
 #define LevelUseFullBright HEXEN_LevelUseFullBright
 #define MN_ActivateMenu HEXEN_MN_ActivateMenu
+#define MN_CheckDeferredSave HEXEN_MN_CheckDeferredSave
 #define MN_DeactivateMenu HEXEN_MN_DeactivateMenu
 #define MN_DrTextA HEXEN_MN_DrTextA
 #define MN_DrTextAYellow HEXEN_MN_DrTextAYellow

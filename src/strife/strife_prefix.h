@@ -271,6 +271,7 @@
 #define M_ChangeSensitivity STRIFE_M_ChangeSensitivity
 #define M_ChangeShowText STRIFE_M_ChangeShowText
 #define M_ChooseSkill STRIFE_M_ChooseSkill
+#define M_CheckDeferredSave STRIFE_M_CheckDeferredSave
 #define M_ClearMenus STRIFE_M_ClearMenus
 #define M_ClearRandom STRIFE_M_ClearRandom
 #define M_CreateSaveDirs STRIFE_M_CreateSaveDirs

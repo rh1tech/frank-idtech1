@@ -972,7 +972,16 @@ void *I_Realloc(void *ptr, size_t size) {
     return new_ptr;
 }
 
+// Exit function list — called by I_Quit before reboot
+#define MAX_EXIT_FUNCS 16
+static void (*exit_funcs[MAX_EXIT_FUNCS])(void);
+static int num_exit_funcs = 0;
+
 void I_Quit(void) {
+    // Run registered exit functions (e.g. M_SaveDefaults)
+    for (int i = 0; i < num_exit_funcs; i++) {
+        exit_funcs[i]();
+    }
     printf("I_Quit: rebooting to WAD selector...\n");
     // Clean reboot back to the start screen
     watchdog_reboot(0, 0, 10);  // Reboot in 10ms
@@ -996,6 +1005,9 @@ byte *I_ZoneBase(int *size) {
 }
 
 void I_AtExit(void (*func)(void), boolean run_on_error) {
+    if (num_exit_funcs < MAX_EXIT_FUNCS) {
+        exit_funcs[num_exit_funcs++] = func;
+    }
 }
 
 void I_PrintBanner(const char *msg) {

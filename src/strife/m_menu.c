@@ -48,6 +48,7 @@
 
 #include "m_argv.h"
 #include "m_controls.h"
+#include "m_config.h"
 #include "m_misc.h"
 #include "m_saves.h"    // [STRIFE]
 #include "p_saveg.h"
@@ -2402,11 +2403,24 @@ void M_Drawer (void)
 // haleyjd 08/28/10: [STRIFE] Added an int param so this can be called by menus.
 //         09/08/10: Added menupause.
 //
+static boolean save_defaults_pending = false;
+
+void M_CheckDeferredSave(void)
+{
+    if (save_defaults_pending)
+    {
+        save_defaults_pending = false;
+        M_SaveDefaults();
+    }
+}
+
 void M_ClearMenus (int choice)
 {
     choice = 0;     // haleyjd: for no warning; not from decompilation.
     menuactive = 0;
     menupause = 0;
+
+    save_defaults_pending = true;
 }
 
 

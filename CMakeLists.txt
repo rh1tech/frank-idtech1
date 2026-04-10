@@ -294,6 +294,8 @@ target_link_options(frank-idtech1 PRIVATE
     -Wl,--wrap=fread
     -Wl,--wrap=fgetc
     -Wl,--wrap=fwrite
+    -Wl,--wrap=fprintf
+    -Wl,--wrap=fscanf
     -Wl,--wrap=fseek
     -Wl,--wrap=ftell
     -Wl,--wrap=remove

@@ -60,6 +60,7 @@
 // Data.
 #include "sounds.h"
 
+#include "m_config.h"
 #include "m_menu.h"
 
 
@@ -2033,11 +2034,26 @@ void M_Drawer (void)
 //
 // M_ClearMenus
 //
+static boolean save_defaults_pending = false;
+
 void M_ClearMenus (void)
 {
     menuactive = 0;
     // if (!netgame && usergame && paused)
     //       sendpause = true;
+
+    // Defer config save to next game tic to avoid blocking input
+    save_defaults_pending = true;
+}
+
+// Called from the game loop to flush pending config saves
+void M_CheckDeferredSave(void)
+{
+    if (save_defaults_pending)
+    {
+        save_defaults_pending = false;
+        M_SaveDefaults();
+    }
 }
 
 

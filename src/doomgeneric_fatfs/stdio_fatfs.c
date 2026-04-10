@@ -1,5 +1,6 @@
 #include "ff.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <string.h>
 
@@ -22,6 +23,13 @@ static FILE* fil_to_file(FIL *fil) {
 // Convert FILE* to FIL*
 static FIL* file_to_fil(FILE *fp) {
     return (FIL*)fp;
+}
+
+// Check if FILE* is one of our FatFS handles (not stdout/stderr/etc.)
+static int is_fatfs_file(FILE *fp) {
+    FIL *fil = (FIL *)fp;
+    return fil >= &file_handles[0].fil
+        && fil <= &file_handles[MAX_OPEN_FILES - 1].fil;
 }
 
 FILE *__wrap_fopen(const char *filename, const char *mode) {
@@ -146,6 +154,54 @@ int __wrap_remove(const char *filename) {
 int __wrap_rename(const char *oldname, const char *newname) {
     FRESULT fr = f_rename(oldname, newname);
     return (fr == FR_OK) ? 0 : -1;
+}
+
+// fprintf wrapper — format into a temp buffer and write via FatFS
+int __wrap_fprintf(FILE *fp, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int n;
+    if (!is_fatfs_file(fp)) {
+        // Real FILE* (stdout/stderr) — vfprintf is not wrapped, so it
+        // uses the real newlib implementation which works with real FILE*.
+        n = vfprintf(fp, fmt, ap);
+    } else {
+        char buf[256];
+        n = vsnprintf(buf, sizeof(buf), fmt, ap);
+        if (n > 0) {
+            int len = n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1;
+            UINT bw;
+            f_write(file_to_fil(fp), buf, len, &bw);
+        }
+    }
+    va_end(ap);
+    return n;
+}
+
+// fscanf wrapper — read a line via FatFS fgetc, then vsscanf
+int __wrap_fscanf(FILE *fp, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int n;
+    if (!is_fatfs_file(fp)) {
+        n = vfscanf(fp, fmt, ap);
+    } else {
+        // Read one line using our wrapped fgetc
+        char buf[256];
+        int i = 0;
+        extern int __wrap_fgetc(FILE *);
+        while (i < (int)sizeof(buf) - 1) {
+            int c = __wrap_fgetc(fp);
+            if (c == EOF) break;
+            buf[i++] = (char)c;
+            if (c == '\n') break;
+        }
+        buf[i] = '\0';
+        if (i == 0) { va_end(ap); return EOF; }
+        n = vsscanf(buf, fmt, ap);
+    }
+    va_end(ap);
+    return n;
 }
 
 // Initialize file handles

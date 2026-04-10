@@ -258,6 +258,9 @@ void doomgeneric_Tick(void)
 
     // Move positional sounds
     S_UpdateSounds(players[consoleplayer].mo);
+
+    MN_CheckDeferredSave();
+
     D_Display();
 }
 

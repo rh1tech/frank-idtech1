@@ -2135,69 +2135,48 @@ static void SaveDefaultCollection(default_collection_t *collection)
 {
     default_t *defaults;
     int i, v;
-    FILE *f;
-	
-    f = M_fopen(collection->filename, "w");
-    if (!f)
-	return; // can't write the file, but don't complain
 
+    // Build config as a single buffer, then write with M_WriteFile
+    // (uses FatFS directly — avoids stdio wrapper issues on embedded)
+    #define SAVE_BUF_SIZE 8192
+    char *buf = malloc(SAVE_BUF_SIZE);
+    if (!buf)
+        return;
+
+    int pos = 0;
     defaults = collection->defaults;
-		
+
     for (i=0 ; i<collection->numdefaults ; i++)
     {
         int chars_written;
 
-        // Ignore unbound variables
-
         if (!defaults[i].bound)
-        {
             continue;
-        }
 
-        // Print the name and line up all values at 30 characters
+        chars_written = M_snprintf(buf + pos, SAVE_BUF_SIZE - pos,
+                                   "%s ", defaults[i].name);
+        pos += chars_written;
 
-        chars_written = fprintf(f, "%s ", defaults[i].name);
+        for (; chars_written < 30 && pos < SAVE_BUF_SIZE - 1; ++chars_written)
+            buf[pos++] = ' ';
 
-        for (; chars_written < 30; ++chars_written)
-            fprintf(f, " ");
-
-        // Print the value
-
-        switch (defaults[i].type) 
+        switch (defaults[i].type)
         {
             case DEFAULT_KEY:
-
-                // use the untranslated version if we can, to reduce
-                // the possibility of screwing up the user's config
-                // file
-                
                 v = *defaults[i].location.i;
 
                 if (v == KEY_RSHIFT)
                 {
-                    // Special case: for shift, force scan code for
-                    // right shift, as this is what Vanilla uses.
-                    // This overrides the change check below, to fix
-                    // configuration files made by old versions that
-                    // mistakenly used the scan code for left shift.
-
                     v = 54;
                 }
                 else if (defaults[i].untranslated
                       && v == defaults[i].original_translated)
                 {
-                    // Has not been changed since the last time we
-                    // read the config file.
-
                     v = defaults[i].untranslated;
                 }
                 else
                 {
-                    // search for a reverse mapping back to a scancode
-                    // in the scantokey table
-
                     int s;
-
                     for (s=0; s<128; ++s)
                     {
                         if (scantokey[s] == v)
@@ -2208,30 +2187,37 @@ static void SaveDefaultCollection(default_collection_t *collection)
                     }
                 }
 
-	        fprintf(f, "%i", v);
+                pos += M_snprintf(buf + pos, SAVE_BUF_SIZE - pos, "%i", v);
                 break;
 
             case DEFAULT_INT:
-	        fprintf(f, "%i", *defaults[i].location.i);
+                pos += M_snprintf(buf + pos, SAVE_BUF_SIZE - pos,
+                                  "%i", *defaults[i].location.i);
                 break;
 
             case DEFAULT_INT_HEX:
-	        fprintf(f, "0x%x", *defaults[i].location.i);
+                pos += M_snprintf(buf + pos, SAVE_BUF_SIZE - pos,
+                                  "0x%x", *defaults[i].location.i);
                 break;
 
             case DEFAULT_FLOAT:
-                fprintf(f, "%f", *defaults[i].location.f);
+                pos += M_snprintf(buf + pos, SAVE_BUF_SIZE - pos,
+                                  "%f", *defaults[i].location.f);
                 break;
 
             case DEFAULT_STRING:
-	        fprintf(f,"\"%s\"", *defaults[i].location.s);
+                pos += M_snprintf(buf + pos, SAVE_BUF_SIZE - pos,
+                                  "\"%s\"", *defaults[i].location.s);
                 break;
         }
 
-        fprintf(f, "\n");
+        if (pos < SAVE_BUF_SIZE - 1)
+            buf[pos++] = '\n';
     }
 
-    fclose (f);
+    M_WriteFile(collection->filename, buf, pos);
+    free(buf);
+    #undef SAVE_BUF_SIZE
 }
 
 // Parses integer values in the configuration file
@@ -2343,13 +2329,12 @@ static void LoadDefaultCollection(default_collection_t *collection)
         return;
     }
 
-    while (!feof(f))
+    while (1)
     {
-        if (fscanf(f, "%79s %99[^\n]\n", defname, strparm) != 2)
+        int rc = fscanf(f, "%79s %99[^\n]\n", defname, strparm);
+        if (rc == EOF || rc != 2)
         {
-            // This line doesn't match
-
-            continue;
+            break;
         }
 
         // Find the setting in the list
