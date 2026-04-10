@@ -24,6 +24,9 @@ set(CPU_SPEED "378" CACHE STRING "CPU clock in MHz: 252, 378, 504")
 # PSRAM speed configuration (84, 100, 133, 166 MHz target)
 set(PSRAM_SPEED "133" CACHE STRING "PSRAM max frequency in MHz: 84, 100, 133, 166")
 
+# Flash speed configuration (max safe flash frequency in MHz)
+set(FLASH_SPEED "66" CACHE STRING "Flash max frequency in MHz")
+
 # CPU voltage selection based on speed
 if(CPU_SPEED GREATER_EQUAL 504)
     set(CPU_VOLTAGE "VREG_VOLTAGE_1_65")
@@ -33,7 +36,7 @@ else()
     set(CPU_VOLTAGE "VREG_VOLTAGE_1_50")
 endif()
 
-message(STATUS "Board: ${BOARD_VARIANT}, CPU: ${CPU_SPEED} MHz, PSRAM: ${PSRAM_SPEED} MHz, Voltage: ${CPU_VOLTAGE}")
+message(STATUS "Board: ${BOARD_VARIANT}, CPU: ${CPU_SPEED} MHz, PSRAM: ${PSRAM_SPEED} MHz, Flash: ${FLASH_SPEED} MHz, Voltage: ${CPU_VOLTAGE}")
 
 # Inject version.txt as a compile-time string.
 file(READ "${CMAKE_CURRENT_LIST_DIR}/version.txt" FRANK_VERSION_RAW)
@@ -113,6 +116,7 @@ set(SHARED_GAME_DEFS
     CPU_CLOCK_MHZ=${CPU_SPEED}
     CPU_VOLTAGE=${CPU_VOLTAGE}
     PSRAM_MAX_FREQ_MHZ=${PSRAM_SPEED}
+    FLASH_MAX_FREQ_MHZ=${FLASH_SPEED}
     CMAP256
     DOOMGENERIC_RESX=320
     DOOMGENERIC_RESY=240

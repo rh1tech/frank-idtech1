@@ -17,7 +17,9 @@ extern int active_game;
 
 // Flash timing configuration for overclocking
 // Must be called BEFORE changing system clock
-#define FLASH_MAX_FREQ_MHZ 88
+#ifndef FLASH_MAX_FREQ_MHZ
+#define FLASH_MAX_FREQ_MHZ 66
+#endif
 
 static void __no_inline_not_in_flash_func(set_flash_timings)(int cpu_mhz) {
     const int clock_hz = cpu_mhz * 1000000;

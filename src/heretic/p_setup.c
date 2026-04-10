@@ -29,6 +29,7 @@
 #include "s_sound.h"
 
 void P_SpawnMapThing(mapthing_t * mthing);
+void P_SpawnPlayer(mapthing_t * mthing);
 
 int numvertexes;
 vertex_t *vertexes;
@@ -289,7 +290,19 @@ void P_LoadThings(int lump)
         {
             if (playeringame[i] && !playerstartsingame[i])
             {
-                I_Error("P_LoadThings: Player %d start missing (vanilla crashes here)", i + 1);
+                mapthing_t default_start = {0};
+                default_start.type = i + 1;
+                if (numvertexes > 0)
+                {
+                    default_start.x = vertexes[0].x >> FRACBITS;
+                    default_start.y = vertexes[0].y >> FRACBITS;
+                }
+                fprintf(stderr,
+                    "P_LoadThings: Player %d start missing"
+                    " (vanilla crashes here), spawning at (%d,%d)\n",
+                    i + 1, default_start.x, default_start.y);
+                playerstarts[i] = default_start;
+                P_SpawnPlayer(&default_start);
             }
             playerstartsingame[i] = false;
         }
