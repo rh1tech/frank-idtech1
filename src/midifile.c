@@ -709,8 +709,13 @@ static boolean ReadTrackFirstChunk(midi_track_t *track, FILE *stream)
 static void FreeTrack(midi_track_t *track)
 {
     unsigned int i;
+    // In streaming mode, chunk_count is the actual number of events in the
+    // buffer.  num_events is a cumulative count that can exceed it after
+    // the song loops, so iterating num_events would read past the buffer.
+    unsigned int events_to_free = track->chunk_count > 0
+                                ? track->chunk_count : track->num_events;
 
-    for (i=0; i<track->num_events; ++i)
+    for (i=0; i<events_to_free; ++i)
     {
         FreeEvent(&track->events[i]);
     }

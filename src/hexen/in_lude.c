@@ -399,7 +399,10 @@ void IN_Drawer(void)
         return;
     }
     UpdateState |= I_FULLSCRN;
-    memcpy(I_VideoBuffer, (byte *) patchINTERPIC, SCREENWIDTH * SCREENHEIGHT);
+    // INTERPIC is a 320x200 raw image; only copy that much to avoid overread
+    memcpy(I_VideoBuffer, (byte *) patchINTERPIC, SCREENWIDTH * 200);
+    if (SCREENHEIGHT > 200)
+        memset(I_VideoBuffer + SCREENWIDTH * 200, 0, SCREENWIDTH * (SCREENHEIGHT - 200));
 
     if (gametype == SINGLE)
     {

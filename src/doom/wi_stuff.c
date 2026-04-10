@@ -80,7 +80,7 @@
 #define SP_STATSY		50
 
 #define SP_TIMEX		16
-#define SP_TIMEY		(SCREENHEIGHT-32)
+#define SP_TIMEY		(200-32)
 
 
 // NET GAME STUFF
@@ -402,6 +402,9 @@ static patch_t *background;
 void WI_slamBackground(void)
 {
     V_DrawPatch(0, 0, background);
+    // Background patches are 320x200; clear the bottom rows on a taller screen
+    if (SCREENHEIGHT > 200)
+        V_DrawFilledBox(0, 200, SCREENWIDTH, SCREENHEIGHT - 200, 0);
 }
 
 // The ticker is used to detect keys

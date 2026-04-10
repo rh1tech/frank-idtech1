@@ -545,6 +545,8 @@ void IN_Drawer(void)
             if (gameepisode < 4)
             {
                 V_DrawPatch(0, 0, patchINTERPIC);
+                if (SCREENHEIGHT > 200)
+                    V_DrawFilledBox(0, 200, SCREENWIDTH, SCREENHEIGHT - 200, 0);
                 IN_DrawOldLevel();
             }
             break;
@@ -552,6 +554,8 @@ void IN_Drawer(void)
             if (gameepisode < 4)
             {
                 V_DrawPatch(0, 0, patchINTERPIC);
+                if (SCREENHEIGHT > 200)
+                    V_DrawFilledBox(0, 200, SCREENWIDTH, SCREENHEIGHT - 200, 0);
                 IN_DrawYAH();
             }
             break;
@@ -559,6 +563,8 @@ void IN_Drawer(void)
             if (gameepisode < 4)
             {
                 V_DrawPatch(0, 0, patchINTERPIC);
+                if (SCREENHEIGHT > 200)
+                    V_DrawFilledBox(0, 200, SCREENWIDTH, SCREENHEIGHT - 200, 0);
             }
             break;
         default:
