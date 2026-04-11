@@ -585,7 +585,16 @@ void DG_Init() {
     // Mount SD Card
     FRESULT fr = f_mount(&fs, "", 1);
     if (fr != FR_OK) {
-        panic("Failed to mount SD card");
+        // Show error on screen instead of panic
+        graphics_set_palette(0, 0x000000);
+        graphics_set_palette(1, 0xFF4444);
+        graphics_set_palette(2, 0xFFFFFF);
+        memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t));
+        draw_text_5x7_scaled(40, 80, "SD CARD ERROR", 1, 3, true);
+        draw_text_5x7(40, 120, "Failed to mount SD card.", 2);
+        draw_text_5x7(40, 140, "Check that an SD card is inserted", 2);
+        draw_text_5x7(40, 150, "and formatted as FAT32.", 2);
+        for (;;) sleep_ms(1000);
     }
 
     // Set current directory to root (required for relative paths)
