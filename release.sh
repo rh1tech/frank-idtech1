@@ -1,19 +1,13 @@
 #!/bin/bash
 #
-# release.sh - Build all release variants of frank-idtech1
+# release.sh - Build release variants of frank-idtech1
 #
-# Creates UF2 files for each board variant (M1, M2) at each clock speed:
-#   - Non-overclocked: 252 MHz CPU, 100 MHz PSRAM
-#   - Medium overclock: 378 MHz CPU, 133 MHz PSRAM
-#   - Max overclock: 504 MHz CPU, 166 MHz PSRAM
+# Creates UF2 files for each board variant (M1, M2).
+# All builds: 504 MHz CPU, 100 MHz PSRAM, 66 MHz Flash.
+# USB HID and PS/2 keyboard/mouse supported.
 #
-# All builds include USB HID support (keyboard/mouse via USB).
-# PS/2 keyboard and mouse are also supported simultaneously.
-#
-# Output format: frank-idtech1_mX_Y_Z_A_BB.uf2
+# Output format: frank-idtech1_mX_A_BB.uf2
 #   X  = Board variant (1 or 2)
-#   Y  = CPU clock in MHz
-#   Z  = PSRAM clock in MHz (target)
 #   A  = Major version
 #   BB = Minor version (zero-padded)
 #
@@ -101,14 +95,10 @@ echo "$MAJOR $MINOR" > "$VERSION_FILE"
 RELEASE_DIR="$SCRIPT_DIR/release"
 mkdir -p "$RELEASE_DIR"
 
-# Build configurations: "BOARD CPU_SPEED PSRAM_SPEED DESCRIPTION"
+# Build configurations: "BOARD CPU_SPEED PSRAM_SPEED FLASH_SPEED"
 CONFIGS=(
-    "M1 252 100 non-overclocked"
-    "M1 378 133 medium-overclock"
-    "M1 504 166 max-overclock"
-    "M2 252 100 non-overclocked"
-    "M2 378 133 medium-overclock"
-    "M2 504 166 max-overclock"
+    "M1 504 100 66"
+    "M2 504 100 66"
 )
 
 BUILD_COUNT=0
@@ -119,32 +109,32 @@ echo -e "${YELLOW}Building $TOTAL_BUILDS firmware variants...${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 for config in "${CONFIGS[@]}"; do
-    read -r BOARD CPU PSRAM DESC <<< "$config"
-    
+    read -r BOARD CPU PSRAM FLASH <<< "$config"
+
     BUILD_COUNT=$((BUILD_COUNT + 1))
-    
+
     # Board variant number
     if [[ "$BOARD" == "M1" ]]; then
         BOARD_NUM=1
     else
         BOARD_NUM=2
     fi
-    
+
     # Output filename
-    OUTPUT_NAME="frank-idtech1_m${BOARD_NUM}_${CPU}_${PSRAM}_${VERSION}.uf2"
-    
+    OUTPUT_NAME="frank-idtech1_m${BOARD_NUM}_${VERSION}.uf2"
+
     echo ""
     echo -e "${CYAN}[$BUILD_COUNT/$TOTAL_BUILDS] Building: $OUTPUT_NAME${NC}"
-    echo -e "  Board: $BOARD | CPU: ${CPU} MHz | PSRAM: ${PSRAM} MHz | $DESC"
-    
+    echo -e "  Board: $BOARD | CPU: ${CPU} MHz | PSRAM: ${PSRAM} MHz | Flash: ${FLASH} MHz"
+
     # Clean and create build directory
     rm -rf build
     mkdir build
     cd build
-    
+
     # Configure with CMake (USB HID enabled for keyboard/mouse support)
-    cmake .. -DBOARD_VARIANT="$BOARD" -DCPU_SPEED="$CPU" -DPSRAM_SPEED="$PSRAM" -DUSB_HID_ENABLED=1 > /dev/null 2>&1
-    
+    cmake .. -DBOARD_VARIANT="$BOARD" -DCPU_SPEED="$CPU" -DPSRAM_SPEED="$PSRAM" -DFLASH_SPEED="$FLASH" -DUSB_HID_ENABLED=1 > /dev/null 2>&1
+
     # Build
     if make -j8 > /dev/null 2>&1; then
         # Copy UF2 to release directory
@@ -157,7 +147,7 @@ for config in "${CONFIGS[@]}"; do
     else
         echo -e "  ${RED}✗ Build failed${NC}"
     fi
-    
+
     cd "$SCRIPT_DIR"
 done
 
