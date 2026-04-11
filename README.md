@@ -8,7 +8,7 @@ All four game engines are compiled into a single firmware binary. At startup, a 
 
 | Engine | Supported WADs |
 |--------|---------------|
-| **Doom** | doom.wad, doom2.wad, doom1.wad (shareware), plutonia.wad, tnt.wad, freedoom1.wad, freedoom2.wad, freedm.wad, chex.wad, hacx.wad |
+| **Doom** | doom.wad, doom2.wad, doom1.wad (shareware), plutonia.wad, tnt.wad |
 | **Heretic** | heretic.wad, heretic1.wad (shareware) |
 | **Hexen** | hexen.wad, hexdd.wad (Deathkings) |
 | **Strife** | strife1.wad, strife0.wad (demo) |
@@ -168,7 +168,6 @@ picotool load -f build/frank-idtech1.uf2
 
 **Shareware / Free:**
 - **Doom Shareware** (`doom1.wad`): [Internet Archive](https://archive.org/details/DoomsharewareEpisode)
-- **Freedoom** (`freedoom1.wad`, `freedoom2.wad`): [freedoom.github.io](https://freedoom.github.io/)
 - **Heretic Shareware** (`heretic1.wad`): [Internet Archive](https://archive.org/details/Heretic_Shareware)
 - **Strife Demo** (`strife0.wad`): [Internet Archive](https://archive.org/details/StrifeDemo)
 
