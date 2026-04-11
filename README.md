@@ -4,6 +4,12 @@ Port of idTech1 games (Doom, Heretic, Hexen, Strife) for Raspberry Pi Pico 2 (RP
 
 All four game engines are compiled into a single firmware binary. At startup, a WAD selector screen automatically detects available WAD files from the SD card and lets you choose which game to play.
 
+## Screenshots
+
+| WAD Selector | Doom | Heretic | Hexen | Strife |
+|:---:|:---:|:---:|:---:|:---:|
+| ![WAD Selector](screenshots/screen5.png) | ![Doom](screenshots/screen1.png) | ![Heretic](screenshots/screen2.png) | ![Hexen](screenshots/screen3.png) | ![Strife](screenshots/screen4.png) |
+
 ## Supported Games
 
 | Engine | Supported WADs |
