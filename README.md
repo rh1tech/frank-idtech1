@@ -1,5 +1,7 @@
 # FRANK idTech1
 
+Official page: **[frank.rh1.tech](https://frank.rh1.tech/)** — hub for all FRANK boards and firmware.
+
 Port of idTech1 games (Doom, Heretic, Hexen, Strife) for Raspberry Pi Pico 2 (RP2350) with HDMI output, SD card, PS/2 or USB keyboard/mouse, and OPL music.
 
 All four game engines are compiled into a single firmware binary. At startup, a WAD selector screen automatically detects available WAD files from the SD card and lets you choose which game to play.
