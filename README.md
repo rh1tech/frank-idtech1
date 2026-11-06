@@ -168,7 +168,7 @@ picotool load -f build/frank-idtech1.uf2
 ## SD Card Setup
 
 1. Format an SD card as FAT32
-2. Place WAD files in the root directory or in an `idtech1` folder
+2. Place WAD files in an `idtech1` folder
 3. The WAD selector will automatically detect all supported WADs at startup
 4. Save directories are created automatically per game
 
