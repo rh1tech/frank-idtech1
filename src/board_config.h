@@ -26,6 +26,14 @@
  *   PS/2: CLK=2, DATA=3
  *   I2S:  DATA=9, CLK=10, LRCK=11
  *
+ * Z0 (Waveshare RP2350-PiZero, an RP2350B):
+ *   HDMI: GPIO32..39 on pio0 (GPIO base 16): data lanes 2/1/0 on 32..37,
+ *         clock on 38/39, no pair inversion
+ *   SD:   SPI1, CLK=30, MOSI=31, MISO=40, CS=43
+ *   PS/2: keyboard CLK=2, DATA=3 (pio1); mouse CLK=0, DATA=1
+ *   NES:  CLK=4, DATA=6, LATCH=7
+ *   PSRAM CS: GPIO47
+ *
  * CPU/PSRAM Speed (set via CMake -DCPU_SPEED=xxx -DPSRAM_SPEED=xxx):
  *   252 MHz - no overclock (default for stable operation)
  *   378 MHz - medium overclock
@@ -33,7 +41,7 @@
  */
 
 // Default to M1 if no config specified
-#if !defined(BOARD_M1) && !defined(BOARD_M2)
+#if !defined(BOARD_M1) && !defined(BOARD_M2) && !defined(BOARD_Z0)
 #define BOARD_M1
 #endif
 
@@ -59,6 +67,8 @@
 // PSRAM pin for RP2350A variants
 #ifdef BOARD_M1
 #define PSRAM_PIN_RP2350A 19
+#elif defined(BOARD_Z0)
+#define PSRAM_PIN_RP2350A 47
 #else
 #define PSRAM_PIN_RP2350A 8
 #endif
@@ -152,5 +162,36 @@ static inline uint get_psram_pin(void) {
 #define I2S_CLOCK_PIN_BASE 10
 
 #endif // BOARD_M2
+
+//=============================================================================
+// Z0 Layout Configuration: Waveshare RP2350-PiZero (murm386 "Z2")
+//=============================================================================
+#ifdef BOARD_Z0
+
+// HDMI on GPIO32..39 from pio0 (its GPIO window at 16): data lanes first,
+// the clock on 38/39. Set for the driver in CMakeLists.txt (drivers/hdmi_pio).
+#define HDMI_BASE_PIN 32
+
+// SD Card Pins (SPI1)
+#define SDCARD_PIN_CLK    30
+#define SDCARD_PIN_CMD    31
+#define SDCARD_PIN_D0     40
+#define SDCARD_PIN_D3     43
+
+// PS/2 Keyboard Pins, on pio2 with the NES pad and I2S: pio0 is the video's,
+// pio1 the PIO-USB host's (it takes a whole PIO)
+#define PS2_PIN_CLK  2
+#define PS2_PIN_DATA 3
+#define PS2KBD_PIO   pio2
+
+// PS/2 Mouse Pins
+#define PS2_MOUSE_CLK  0
+#define PS2_MOUSE_DATA 1
+
+// I2S Audio Pins (a PCM5102A module: DIN 10, BCK 11, LRCK 12)
+#define I2S_DATA_PIN       10
+#define I2S_CLOCK_PIN_BASE 11
+
+#endif // BOARD_Z0
 
 #endif // BOARD_CONFIG_H

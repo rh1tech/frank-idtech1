@@ -75,10 +75,9 @@ void i2s_init(i2s_config_t *config) {
     dma_hw->ints1 = (1u << AUDIO_DMA_CH_A) | (1u << AUDIO_DMA_CH_B);
 
     /* Configure GPIO pins for the selected PIO */
-    uint pio_func = (audio_pio == pio0) ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1;
-    gpio_set_function(config->data_pin, pio_func);
-    gpio_set_function(config->clock_pin_base, pio_func);
-    gpio_set_function(config->clock_pin_base + 1, pio_func);
+    pio_gpio_init(audio_pio, config->data_pin);
+    pio_gpio_init(audio_pio, config->clock_pin_base);
+    pio_gpio_init(audio_pio, config->clock_pin_base + 1);
 
     gpio_set_drive_strength(config->data_pin, GPIO_DRIVE_STRENGTH_12MA);
     gpio_set_drive_strength(config->clock_pin_base, GPIO_DRIVE_STRENGTH_12MA);

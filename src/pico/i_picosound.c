@@ -18,6 +18,8 @@
 //	System interface for sound.
 //
 
+#include "fui.h"
+#include "hdmi_pio.h"
 #include "config.h"
 
 #include <stdio.h>
@@ -119,6 +121,32 @@ static void i2s_fill_audio(int buf_index, uint32_t *buf, uint32_t frames) {
         // Underrun — output silence
         memset(buf, 0, frames * sizeof(uint32_t));
     }
+}
+
+// HDMI audio: the video line IRQ (core 1) pulls 44.1 kHz frames, four for
+// each audio packet (drivers/hdmi_pio). They come from the same ring as I2S,
+// stepped 49716/44100 a frame with linear interpolation; a slot used up is
+// handed back as i2s_fill_audio does. HDMI then paces the mixer.
+#define HDMI_AUDIO_RATE 44100
+#define HDMI_STEP ((uint32_t)(((uint64_t)PICO_SOUND_SAMPLE_FREQ << 16) / HDMI_AUDIO_RATE))
+static uint32_t hdmi_pos;  // 16.16 frames into the slot being played
+
+static uint32_t __not_in_flash_func(hdmi_source)(void) {
+    if (mix_rd == mix_wr) return 0;  // underrun: silence
+    const int16_t *s = mix_ring[mix_rd % MIX_RING_COUNT];
+    const uint32_t i = hdmi_pos >> 16, f = (hdmi_pos & 0xffff) >> 1;
+    int l = s[i * 2], r = s[i * 2 + 1];
+    if (i + 1 < PICO_SOUND_BUFFER_SAMPLES) {
+        l += ((s[i * 2 + 2] - l) * (int)f) >> 15;
+        r += ((s[i * 2 + 3] - r) * (int)f) >> 15;
+    }
+    hdmi_pos += HDMI_STEP;
+    if ((hdmi_pos >> 16) >= PICO_SOUND_BUFFER_SAMPLES) {
+        hdmi_pos -= (uint32_t)PICO_SOUND_BUFFER_SAMPLES << 16;
+        __dmb();
+        mix_rd++;
+    }
+    return (uint16_t)l | (uint32_t)(uint16_t)r << 16;
 }
 
 // ====== FROM ADPCM-LIB =====
@@ -453,6 +481,11 @@ static boolean I_Pico_SoundIsPlaying(int channel)
     return is_channel_playing(channel);
 }
 
+// The board's output volume, 0..16 (the F12 window, "master_volume")
+int master_volume = 16;
+// 0 stereo, 1 left and right swapped, 2 mono ("audio_stereo")
+int audio_stereo = 0;
+
 static void mix_audio_buffer(audio_buffer_t *buffer)
 {
     // If we're draining, output silence only
@@ -514,6 +547,23 @@ static void mix_audio_buffer(audio_buffer_t *buffer)
     }
 
     buffer->sample_count = buffer->max_sample_count;
+    if (master_volume < 16) {
+        int16_t *samples = (int16_t *)buffer->buffer->bytes;
+        const int mv = master_volume < 0 ? 0 : master_volume;
+        for (int i = 0; i < buffer->sample_count * 2; i++) samples[i] = (int16_t)((samples[i] * mv) >> 4);
+    }
+    if (audio_stereo) {
+        int16_t *samples = (int16_t *)buffer->buffer->bytes;
+        for (int i = 0; i < buffer->sample_count * 2; i += 2) {
+            const int16_t l = samples[i], r = samples[i + 1];
+            if (audio_stereo == 1) {
+                samples[i] = r;
+                samples[i + 1] = l;
+            } else {
+                samples[i] = samples[i + 1] = (int16_t)((l + r) / 2);
+            }
+        }
+    }
     if (fade_state == FS_SILENT) {
         memset(buffer->buffer->bytes, 0, buffer->buffer->size);
     } else if (fade_state != FS_NONE) {
@@ -566,12 +616,28 @@ static boolean I_Pico_InitSound(boolean _use_sfx_prefix)
 {
     use_sfx_prefix = _use_sfx_prefix;
 
+    if (fui_cfg.audio == FUI_AUDIO_HDMI) {  // F12 > Audio > Device
+        memset(mix_ring, 0, sizeof(mix_ring));
+        mix_rd = 0;
+        mix_wr = 0;
+        hdmi_pos = 0;
+        hdmi_pio_set_audio_source(hdmi_source);
+        sound_initialized = true;
+        printf("I_Pico_InitSound: HDMI audio (%d Hz from %d Hz)\n", HDMI_AUDIO_RATE,
+               PICO_SOUND_SAMPLE_FREQ);
+        return true;
+    }
+
     i2s_cfg = (i2s_config_t){
         .sample_freq = PICO_SOUND_SAMPLE_FREQ,
         .channel_count = 2,
         .data_pin = PICO_AUDIO_I2S_DATA_PIN,
         .clock_pin_base = PICO_AUDIO_I2S_CLOCK_PIN_BASE,
+#ifdef AUDIO_PIO
+        .pio = AUDIO_PIO,
+#else
         .pio = pio0,
+#endif
         .dma_trans_count = PICO_SOUND_BUFFER_SAMPLES,
         .volume = 0, // max volume (no attenuation)
     };

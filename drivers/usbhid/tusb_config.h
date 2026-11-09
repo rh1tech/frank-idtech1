@@ -24,9 +24,12 @@ extern "C" {
 #define CFG_TUSB_MCU OPT_MCU_RP2040
 #endif
 
-// RHPort number used for host
+// PIO-USB (Z0's "PIO-USB" socket) is root port 1, the native USB port 0
+#ifndef CFG_TUH_RPI_PIO_USB
+#define CFG_TUH_RPI_PIO_USB 0
+#endif
 #ifndef BOARD_TUH_RHPORT
-#define BOARD_TUH_RHPORT 0
+#define BOARD_TUH_RHPORT (CFG_TUH_RPI_PIO_USB ? 1 : 0)
 #endif
 
 // RHPort max speed
@@ -46,27 +49,21 @@ extern "C" {
 
 // Set to 1 to use PIO-USB for Host (requires pio-usb library)
 // Set to 0 to use native USB port for Host (disables USB CDC stdio)
-#ifndef CFG_TUH_RPI_PIO_USB
-#define CFG_TUH_RPI_PIO_USB 0
-#endif
 
-#if CFG_TUH_RPI_PIO_USB
-// PIO-USB GPIO pins (define these in board_config.h if using PIO-USB)
-#ifndef USB_HOST_PIO_DP_PIN
-#define USB_HOST_PIO_DP_PIN 20  // D+ pin, D- will be DP+1
-#endif
-#endif
 
 //--------------------------------------------------------------------
 // HOST CONFIGURATION
 //--------------------------------------------------------------------
 
 // Size of buffer for receiving and sending control requests
-#define CFG_TUH_ENUMERATION_BUFSIZE 256
+#define CFG_TUH_ENUMERATION_BUFSIZE 1024  // DS4/DS5 report descriptors are ~500 bytes
 
 // Max number of devices (hub counts as 1, then each device behind hub)
 // Need at least: 1 hub + 2 HID devices = 3, use 5 for safety
-#define CFG_TUH_DEVICE_MAX 5
+#define CFG_TUH_DEVICE_MAX 6
+
+// Composite keyboards queue many events at enumeration (murm386 3958b46)
+#define CFG_TUH_TASK_QUEUE_SZ 64
 
 // Number of hub devices
 #define CFG_TUH_HUB 1
@@ -80,6 +77,9 @@ extern "C" {
 
 // Vendor (disable)
 #define CFG_TUH_VENDOR 0
+
+// XInput pads (xinput_host.c, an application class driver)
+#define CFG_TUH_XINPUT 1
 
 // MSC host (disable - we use SD card)
 #define CFG_TUH_MSC 0

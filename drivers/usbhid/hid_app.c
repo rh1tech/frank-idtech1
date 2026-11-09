@@ -8,6 +8,11 @@
 
 #include "tusb.h"
 #include "usbhid.h"
+#include "hid_rip.h"
+#if CFG_TUH_RPI_PIO_USB
+#include "pio_usb.h"
+#include "hardware/dma.h"
+#endif
 #include <stdio.h>
 #include <string.h>
 
@@ -154,6 +159,12 @@ static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t c
     (void)dev_addr;
     
     uint8_t const rpt_count = hid_info[instance].report_count;
+
+    // A descriptor nothing could parse: many cheap pads (murmgenesis)
+    if (rpt_count == 0) {
+        gamepad_hid_generic(instance, report, len);
+        return;
+    }
     tuh_hid_report_info_t *rpt_info_arr = hid_info[instance].report_info;
     tuh_hid_report_info_t *rpt_info = NULL;
     
@@ -186,6 +197,10 @@ static void process_generic_report(uint8_t dev_addr, uint8_t instance, uint8_t c
             case HID_USAGE_DESKTOP_MOUSE:
                 process_mouse_report((hid_mouse_report_t const *)report);
                 break;
+            case HID_USAGE_DESKTOP_GAMEPAD:
+            case HID_USAGE_DESKTOP_JOYSTICK:
+                gamepad_hid_generic(instance, report, len);
+                break;
             default:
                 break;
         }
@@ -206,10 +221,32 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
         mouse_connected = 1;
     }
     
+    uint16_t vid = 0, pid = 0;
+    tuh_vid_pid_get(dev_addr, &vid, &pid);
+    // 0810:0001 announces boot keyboard/mouse but is a gamepad dongle that
+    // goes silent in boot protocol (pico-speccy)
+    if (gamepad_hid_mount(instance, vid, pid) && itf_protocol != HID_ITF_PROTOCOL_NONE) {
+        tuh_hid_set_protocol(dev_addr, instance, HID_PROTOCOL_REPORT);
+    }
+
     // Parse generic report descriptor
     if (itf_protocol == HID_ITF_PROTOCOL_NONE) {
         hid_info[instance].report_count = tuh_hid_parse_report_descriptor(
             hid_info[instance].report_info, MAX_REPORT, desc_report, desc_len);
+
+        // Long composite descriptors (DS4/DS5 pads) trip the stock parser:
+        // parse again with fruit-bat's (pico-hid-host, via pico-speccy)
+        if (hid_info[instance].report_count == 0 && desc_report && desc_len) {
+            tuh_hid_report_info_plus_t rip_info[MAX_REPORT];
+            uint8_t n = tuh_hid_parse_report_descriptor_plus(rip_info, MAX_REPORT, desc_report, desc_len);
+            if (n > MAX_REPORT) n = MAX_REPORT;
+            for (uint8_t i = 0; i < n; i++) {
+                hid_info[instance].report_info[i].report_id = rip_info[i].report_id;
+                hid_info[instance].report_info[i].usage = (uint8_t)rip_info[i].usage;
+                hid_info[instance].report_info[i].usage_page = rip_info[i].usage_page;
+            }
+            hid_info[instance].report_count = n;
+        }
     }
     
     // Request to receive reports
@@ -221,6 +258,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
 // Invoked when HID device is unmounted
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
     uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
+    gamepad_hid_umount(instance);
     
     if (itf_protocol == HID_ITF_PROTOCOL_KEYBOARD) {
         keyboard_connected = 0;
@@ -232,7 +270,14 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
 // Invoked when report is received
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *report, uint16_t len) {
     uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
-    
+
+    // Zero-length reports are legal idle traffic on some receivers;
+    // known gamepads first (some announce boot protocol)
+    if (report == NULL || len == 0 || gamepad_hid_report(instance, report, len)) {
+        tuh_hid_receive_report(dev_addr, instance);
+        return;
+    }
+
     switch (itf_protocol) {
         case HID_ITF_PROTOCOL_KEYBOARD:
             process_kbd_report((hid_keyboard_report_t const *)report, &prev_kbd_report);
@@ -259,6 +304,25 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
 //--------------------------------------------------------------------
 
 void usbhid_init(void) {
+#if CFG_TUH_RPI_PIO_USB
+    /*
+     * From murm386. Pico-PIO-USB bit-bangs full speed from PIO dividers
+     * derived from clk_sys here, once: the clock must be final and a
+     * multiple of 12 MHz (504 and 252 MHz are). Its 1 ms SOF timer runs on
+     * this core, core 0. The library claims the DMA channel and state
+     * machines itself and panics if they are taken, and channels 0..3 are
+     * the video's: pick a free channel and hand it over unclaimed.
+     */
+    pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
+    pio_cfg.pin_dp = PIO_USB_DP_PIN;
+    pio_cfg.pio_tx_num = PIO_USB_PIO;
+    pio_cfg.pio_rx_num = PIO_USB_PIO;
+    int ch = dma_claim_unused_channel(true);
+    dma_channel_unclaim(ch);
+    pio_cfg.tx_ch = (uint8_t)ch;
+    tuh_configure(BOARD_TUH_RHPORT, TUH_CFGID_RPI_PIO_USB_CONFIGURATION, &pio_cfg);
+#endif
+
     // Initialize TinyUSB Host
     tuh_init(BOARD_TUH_RHPORT);
     

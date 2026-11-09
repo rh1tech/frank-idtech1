@@ -329,8 +329,13 @@ void D_IdentifyVersion(void)
     // @category compat
     //
 
-    // v1.0 IWAD check disabled for embedded port
-    (void)0;
+    // The v1.0 IWAD is played rather than refused, as a 4-player game: its
+    // demos have 4 player slots, and reading 8 takes tic data for players
+    // 5..8, who then are "in game" without a body.
+    if (W_CheckNumForName("CLUS1MSG") == -1)
+    {
+        maxplayers = 4;
+    }
 }
 
 // Set the gamedescription string.

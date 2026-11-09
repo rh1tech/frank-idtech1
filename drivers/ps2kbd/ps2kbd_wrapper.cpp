@@ -2,6 +2,7 @@
 #include "ps2kbd_wrapper.h"
 #include "ps2kbd_mrmltr.h"
 #include "doomkeys.h"
+#include "../hid_doomkeys.h"
 #include <queue>
 
 struct KeyEvent {
@@ -11,32 +12,8 @@ struct KeyEvent {
 
 static std::queue<KeyEvent> event_queue;
 
-// HID to Doom mapping (partial)
 static unsigned char hid_to_doom(uint8_t code) {
-    if (code >= 0x04 && code <= 0x1D) return 'a' + (code - 0x04);
-    if (code >= 0x1E && code <= 0x27) {
-        if (code == 0x27) return '0';
-        return '1' + (code - 0x1E);
-    }
-    if (code == 0x28) return KEY_ENTER;
-    if (code == 0x29) return KEY_ESCAPE;
-    if (code == 0x2A) return KEY_BACKSPACE;
-    if (code == 0x2B) return KEY_TAB;
-    if (code == 0x2C) return KEY_USE;  // Space key mapped to USE action
-    if (code == 0x4F) return KEY_RIGHTARROW;
-    if (code == 0x50) return KEY_LEFTARROW;
-    if (code == 0x51) return KEY_DOWNARROW;
-    if (code == 0x52) return KEY_UPARROW;
-    
-    // Function keys
-    if (code >= 0x3A && code <= 0x45) {
-        return KEY_F1 + (code - 0x3A);
-    }
-    
-    // Note: Modifiers (E0-E7) are handled separately in modifier byte,
-    // not as keycodes, so we don't map them here
-    
-    return 0;
+    return hid_to_doomkey(code);
 }
 
 static void key_handler(hid_keyboard_report_t *curr, hid_keyboard_report_t *prev) {
@@ -100,7 +77,10 @@ extern "C" void ps2kbd_init(void) {
     // PS2 keyboard driver expects base_gpio as CLK, and base_gpio+1 as DATA
     // For M1: PS2_PIN_CLK=0, PS2_PIN_DATA=1, so base should be PS2_PIN_CLK
     // For M2: PS2_PIN_CLK=2, PS2_PIN_DATA=3, so base should be PS2_PIN_CLK
-    kbd = new Ps2Kbd_Mrmltr(pio0, PS2_PIN_CLK, key_handler);
+#ifndef PS2KBD_PIO
+#define PS2KBD_PIO pio0
+#endif
+    kbd = new Ps2Kbd_Mrmltr(PS2KBD_PIO, PS2_PIN_CLK, key_handler);
     kbd->init_gpio();
 }
 

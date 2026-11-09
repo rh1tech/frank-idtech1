@@ -2,6 +2,7 @@
 #ifndef HERETIC_PREFIX_H
 #define HERETIC_PREFIX_H
 #define  HERETIC_
+#define fs_glue HERETIC_fs_glue
 #define MN_CheckDeferredSave HERETIC_MN_CheckDeferredSave
 #define AM_Drawer HERETIC_AM_Drawer
 #define AM_LevelInit HERETIC_AM_LevelInit

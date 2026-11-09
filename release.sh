@@ -2,12 +2,14 @@
 #
 # release.sh - Build release variants of frank-idtech1
 #
-# Creates UF2 files for each board variant (M1, M2).
-# All builds: 504 MHz CPU, 100 MHz PSRAM, 66 MHz Flash.
+# Creates UF2 files for each board variant (M1, M2, Z0).
+# M1/M2: 504 MHz CPU, 100 MHz PSRAM, 66 MHz Flash.
+# Z0 (Waveshare RP2350-PiZero): 504 MHz CPU, 133 MHz PSRAM, 66 MHz Flash,
+# USB keyboard/mouse on its "PIO-USB" socket.
 # USB HID and PS/2 keyboard/mouse supported.
 #
-# Output format: frank-idtech1_mX_A_BB.uf2
-#   X  = Board variant (1 or 2)
+# Output format: frank-idtech1_B_A_BB.uf2
+#   B  = Board variant (m1, m2 or z0)
 #   A  = Major version
 #   BB = Minor version (zero-padded)
 #
@@ -99,6 +101,7 @@ mkdir -p "$RELEASE_DIR"
 CONFIGS=(
     "M1 504 100 66"
     "M2 504 100 66"
+    "Z0 504 133 66"
 )
 
 BUILD_COUNT=0
@@ -113,15 +116,9 @@ for config in "${CONFIGS[@]}"; do
 
     BUILD_COUNT=$((BUILD_COUNT + 1))
 
-    # Board variant number
-    if [[ "$BOARD" == "M1" ]]; then
-        BOARD_NUM=1
-    else
-        BOARD_NUM=2
-    fi
-
     # Output filename
-    OUTPUT_NAME="frank-idtech1_m${BOARD_NUM}_${VERSION}.uf2"
+    BOARD_LC=$(echo "$BOARD" | tr '[:upper:]' '[:lower:]')
+    OUTPUT_NAME="frank-idtech1_${BOARD_LC}_${VERSION}.uf2"
 
     echo ""
     echo -e "${CYAN}[$BUILD_COUNT/$TOTAL_BUILDS] Building: $OUTPUT_NAME${NC}"

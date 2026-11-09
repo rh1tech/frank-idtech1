@@ -11,15 +11,26 @@ endif()
 string(TOUPPER ${GAME} GAME_UPPER)
 message(STATUS "Game: ${GAME}")
 
-# Set board to Pico 2 (RP2350)
-set(PICO_BOARD pico2 CACHE STRING "Pico board type")
+# Board configuration variant (M1, M2, Z0)
+set(BOARD_VARIANT "M1" CACHE STRING "Board variant: M1, M2 or Z0")
 
-# Board configuration variant (M1, M2)
-set(BOARD_VARIANT "M1" CACHE STRING "Board variant: M1 or M2")
+if(BOARD_VARIANT STREQUAL "Z0")
+    # Waveshare RP2350-PiZero: an RP2350B. The stock pico2 definition caps
+    # the GPIOs at 0..29; HDMI (32..39), SD (30/31/40/43) and PSRAM CS (47)
+    # need the B package and PIO's movable GPIO window.
+    set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/boards CACHE PATH "" FORCE)
+    set(PICO_BOARD "frank_z0_rp2350b" CACHE STRING "Pico board type" FORCE)
+else()
+    # Set board to Pico 2 (RP2350)
+    set(PICO_BOARD pico2 CACHE STRING "Pico board type")
+endif()
 
-# CPU overclock configuration (252, 378, 504 MHz)
-# 252 = no overclock (default), 378 = medium, 504 = high
-set(CPU_SPEED "378" CACHE STRING "CPU clock in MHz: 252, 378, 504")
+# CPU clock (252 or 504 MHz). The HDMI PIO runs at clk_sys / 252 MHz: 378
+# would make that 1.5, a fractional divider the TMDS stream does not survive.
+set(CPU_SPEED "504" CACHE STRING "CPU clock in MHz: 252 or 504")
+if(NOT CPU_SPEED STREQUAL "252" AND NOT CPU_SPEED STREQUAL "504")
+    message(FATAL_ERROR "CPU_SPEED must be 252 or 504 (the HDMI PIO divider is clk_sys / 252 MHz)")
+endif()
 
 # PSRAM speed configuration (84, 100, 133, 166 MHz target)
 set(PSRAM_SPEED "133" CACHE STRING "PSRAM max frequency in MHz: 84, 100, 133, 166")
@@ -41,7 +52,31 @@ message(STATUS "Board: ${BOARD_VARIANT}, CPU: ${CPU_SPEED} MHz, PSRAM: ${PSRAM_S
 # Inject version.txt as a compile-time string.
 file(READ "${CMAKE_CURRENT_LIST_DIR}/version.txt" FRANK_VERSION_RAW)
 string(STRIP "${FRANK_VERSION_RAW}" FRANK_VERSION_RAW)
-string(REGEX REPLACE "[ \t]+" "." FRANK_VERSION "${FRANK_VERSION_RAW}")
+# "1 1" is 1.01
+string(REGEX REPLACE "[ \t]+" ";" FRANK_VERSION_LIST "${FRANK_VERSION_RAW}")
+list(GET FRANK_VERSION_LIST 0 FRANK_VERSION_MAJOR)
+list(GET FRANK_VERSION_LIST 1 FRANK_VERSION_MINOR)
+math(EXPR FRANK_VERSION_MINOR "${FRANK_VERSION_MINOR}")
+if(FRANK_VERSION_MINOR LESS 10)
+    set(FRANK_VERSION_MINOR "0${FRANK_VERSION_MINOR}")
+endif()
+set(FRANK_VERSION "${FRANK_VERSION_MAJOR}.${FRANK_VERSION_MINOR}")
+
+# Bench: the native USB as a serial console instead of the HID host (below)
+option(FRANK_USB_CONSOLE "Bench: native USB is a serial console, not the HID host" OFF)
+
+# Z0 (RP2350-PiZero): the USB host on the "PIO-USB" USB-C socket (GPIO28/29,
+# Pico-PIO-USB) instead of the native one, as murm386's Z2.
+option(FRANK_Z0_PIO_USB "Z0: USB host on the PIO-USB socket (OFF: the native USB socket)" ON)
+if(BOARD_VARIANT STREQUAL "Z0" AND FRANK_Z0_PIO_USB AND NOT FRANK_USB_CONSOLE)
+    set(PIO_USB_ENABLED ON)
+    # Vendored Pico-PIO-USB 0.7.2 (sekigon-gonnoc, MIT) with murm386's
+    # hot-replug fixes. Must be set before pico_sdk_init(): TinyUSB's rp2040
+    # family script picks it up and creates the tinyusb_pico_pio_usb target.
+    set(PICO_PIO_USB_PATH ${CMAKE_CURRENT_LIST_DIR}/drivers/pio_usb)
+else()
+    set(PIO_USB_ENABLED OFF)
+endif()
 
 include(pico_sdk_import.cmake)
 
@@ -57,22 +92,50 @@ add_subdirectory(src/fatfs)
 add_subdirectory(drivers/sdcard)
 add_subdirectory(drivers/ps2kbd)
 add_subdirectory(drivers/ps2mouse)
+add_subdirectory(drivers/nespad)
+# Native USB is the keyboard/mouse/gamepad host (as in frank-quake2), and
+# stdio goes nowhere: UART0 (GPIO0/1) is a PS/2 port on every board.
+#
+# A bench build (as frank-ecat's DEBUG_CONSOLE=usb) makes the native USB a
+# serial console instead: logs out, keys in (the PS/2 keyboard still works,
+# USB HID is off), "~BOOT~" reboots into BOOTSEL and "~RST~" restarts, so
+# the board is reflashed with picotool without touching it.
+if(FRANK_USB_CONSOLE)
+    set(USB_HID_ENABLED OFF)
+    message(STATUS "USB serial console on the native USB port (USB HID off)")
+else()
+    set(USB_HID_ENABLED ON)
+endif()
 add_subdirectory(drivers/usbhid)
 
 
 # Create a library for other drivers
 add_library(drivers
-    drivers/HDMI.c
+    drivers/video_hdmi.c
+    drivers/hdmi_pio/hdmi_pio.c
+    drivers/hdmi/hstx_packet.c
     drivers/psram_init.c
     drivers/psram_allocator.c
 )
-target_include_directories(drivers PUBLIC drivers)
+target_include_directories(drivers PUBLIC drivers drivers/hdmi_pio drivers/hdmi)
 target_compile_definitions(drivers PRIVATE
     BOARD_${BOARD_VARIANT}
     PSRAM_MAX_FREQ_MHZ=${PSRAM_SPEED}
 )
+# HDMI: frank-quake2's PIO driver (drivers/hdmi_pio). Z0 drives GPIO32..39
+# from pio0 (its GPIO window at 16); M1/M2 use pio1, their pio0 holds the
+# PS/2 keyboard and I2S.
+if(BOARD_VARIANT STREQUAL "Z0")
+    target_compile_definitions(drivers PRIVATE HDMI_PIO_BASE_PIN=32 HDMI_PIO_Z0_LAYOUT=1 PIO_VIDEO=pio0)
+elseif(BOARD_VARIANT STREQUAL "M2")
+    target_compile_definitions(drivers PRIVATE HDMI_PIO_BASE_PIN=12 HDMI_PIO_Z0_LAYOUT=0 PIO_VIDEO=pio1)
+else()
+    target_compile_definitions(drivers PRIVATE HDMI_PIO_BASE_PIN=6 HDMI_PIO_Z0_LAYOUT=0 PIO_VIDEO=pio1)
+endif()
 target_compile_options(drivers PRIVATE -Ofast)
-target_link_libraries(drivers pico_stdlib hardware_dma hardware_pio hardware_spi)
+# the IRQ's loops must not become calls to memset/memcpy in flash
+set_source_files_properties(drivers/hdmi_pio/hdmi_pio.c drivers/video_hdmi.c PROPERTIES COMPILE_OPTIONS "-fno-tree-loop-distribute-patterns")
+target_link_libraries(drivers pico_stdlib pico_multicore hardware_dma hardware_pio hardware_spi hardware_irq hardware_timer)
 
 # =============================================================================
 # Multi-game build: all engines in one binary with symbol namespacing
@@ -146,6 +209,7 @@ set(SHARED_GAME_DEFS
     EMU8950_NO_RATECONV=1
     PICO_ON_DEVICE=1
     PICO_MALLOC_PANIC=0
+    PICO_CORE1_STACK_SIZE=0
     FRANK_VERSION="${FRANK_VERSION}"
 )
 
@@ -205,6 +269,14 @@ set(PICO_SOURCES
 add_executable(frank-idtech1
     src/main.c
     src/doomgeneric_rp2350.c
+    src/fui_video.c
+    src/fui_gfx.c
+    src/fui_input.c
+    src/fui_shell.c
+    src/fui_menu.c
+    src/fui_cfg.c
+    src/font6x8.c
+    drivers/hid_doomkeys.c
     src/doomgeneric_fatfs/w_file_fatfs.c
     src/doomgeneric_fatfs/m_misc_fatfs.c
     src/doomgeneric_fatfs/stdio_fatfs.c
@@ -255,6 +327,29 @@ if(BOARD_VARIANT STREQUAL "M1")
         SDCARD_PIN_SPI0_MOSI=3
         SDCARD_PIN_SPI0_MISO=4
     )
+elseif(BOARD_VARIANT STREQUAL "Z0")
+    # Waveshare RP2350-PiZero (murm386 "Z2", frank-quake2 "Z0")
+    target_compile_definitions(frank-idtech1 PRIVATE
+        # I2S Audio (a PCM5102A module; sound is not brought up yet). pio0 is
+        # the video's (its GPIO window starts at 16), pio1 the PS/2 keyboard's.
+        PICO_AUDIO_I2S_DATA_PIN=10
+        PICO_AUDIO_I2S_CLOCK_PIN_BASE=11
+        AUDIO_PIO=pio2
+        # SD Card on SPI1
+        SDCARD_SPI_BUS=spi1
+        SDCARD_PIN_SPI0_CS=43
+        SDCARD_PIN_SPI0_SCK=30
+        SDCARD_PIN_SPI0_MOSI=31
+        SDCARD_PIN_SPI0_MISO=40
+        # NES/SNES pad (murm386)
+        NESPAD_GPIO_CLK=4
+        NESPAD_GPIO_LATCH=7
+        NESPAD_GPIO_DATA=6
+    )
+    if(PIO_USB_ENABLED)
+        # the "PIO-USB" socket: D+ GPIO28, D- GPIO29, a whole PIO (pio1)
+        target_compile_definitions(frank-idtech1 PRIVATE PIO_USB_DP_PIN=28 PIO_USB_PIO=1)
+    endif()
 elseif(BOARD_VARIANT STREQUAL "M2")
     target_compile_definitions(frank-idtech1 PRIVATE
         # I2S Audio
@@ -265,6 +360,11 @@ elseif(BOARD_VARIANT STREQUAL "M2")
         SDCARD_PIN_SPI0_SCK=6
         SDCARD_PIN_SPI0_MOSI=7
         SDCARD_PIN_SPI0_MISO=4
+        # NES/SNES pad port (murmgenesis). M1 has none here: its pins
+        # GPIO14/15 are this firmware's PS/2 mouse.
+        NESPAD_GPIO_CLK=20
+        NESPAD_GPIO_LATCH=21
+        NESPAD_GPIO_DATA=26
     )
 endif()
 
@@ -279,10 +379,12 @@ target_link_libraries(frank-idtech1
     hardware_irq
     hardware_interp
     hardware_exception
+    hardware_flash
     sdcard
     ps2kbd
     ps2mouse
     usbhid
+    nespad
     fatfs
     drivers
 )
@@ -302,12 +404,29 @@ target_link_options(frank-idtech1 PRIVATE
     -Wl,--wrap=rename
 )
 
-# USB stdio
-if(USB_HID_ENABLED)
-    pico_enable_stdio_usb(frank-idtech1 0)
-    pico_enable_stdio_uart(frank-idtech1 1)
-else()
+# No stdio: USB is the HID host, UART0's pins are PS/2. A bench build can
+# take UART0 (GPIO0/1, 115200) for a console instead: logs, keys typed there,
+# ~BOOT~ to reboot into BOOTSEL, ~RST~ to restart. The PS/2 port on those
+# pins (M2: mouse, M1: keyboard) is then off.
+option(FRANK_UART_CONSOLE "UART0 console on GPIO0/1 instead of that PS/2 port" OFF)
+# A bench with a debug probe's UART on GPIO0/1: the M2's PS/2 mouse driver
+# holds GPIO0 low, which the probe takes for an endless break and stops
+# answering SWD. This leaves GPIO0/1 alone (M2; USB mice still work).
+option(FRANK_NO_PS2_MOUSE "Leave the M2's PS/2 mouse pins (GPIO0/1) undriven" OFF)
+if(FRANK_NO_PS2_MOUSE)
+    target_compile_definitions(frank-idtech1 PRIVATE FRANK_NO_PS2_MOUSE=1)
+endif()
+if(FRANK_USB_CONSOLE)
     pico_enable_stdio_usb(frank-idtech1 1)
+    target_compile_definitions(frank-idtech1 PRIVATE FRANK_USB_CONSOLE=1)
+else()
+    pico_enable_stdio_usb(frank-idtech1 0)
+endif()
+if(FRANK_UART_CONSOLE)
+    pico_enable_stdio_uart(frank-idtech1 1)
+    target_compile_definitions(frank-idtech1 PRIVATE FRANK_UART_CONSOLE=1)
+    message(STATUS "UART0 console on GPIO0/1 (PS/2 on those pins off)")
+else()
     pico_enable_stdio_uart(frank-idtech1 0)
 endif()
 

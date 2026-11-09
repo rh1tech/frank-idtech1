@@ -2,6 +2,7 @@
 #ifndef STRIFE_PREFIX_H
 #define STRIFE_PREFIX_H
 #define  STRIFE_
+#define fs_glue STRIFE_fs_glue
 #define AM_Drawer STRIFE_AM_Drawer
 #define AM_LevelInit STRIFE_AM_LevelInit
 #define AM_Responder STRIFE_AM_Responder

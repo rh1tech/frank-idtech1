@@ -115,7 +115,7 @@ boolean screenvisible;
 // the values exceed the value of mouse_threshold, they are multiplied
 // by mouse_acceleration to increase the speed.
 
-float mouse_acceleration = 2.0;
+float mouse_acceleration = 1.0;  // frank-idtech1: off until set in the F12 window
 int mouse_threshold = 10;
 
 // Gamma correction level to use
@@ -313,6 +313,7 @@ void I_StartFrame (void)
 void I_StartTic (void)
 {
 	I_GetEvent();
+	DG_CheckSettings();
 }
 
 void I_UpdateNoBlit (void)
@@ -346,7 +347,8 @@ void I_FinishUpdate (void)
     //x_offset     = 0;
     x_offset_end = ((s_Fb.xres - (SCREENWIDTH  * fb_scaling)) * s_Fb.bits_per_pixel/8) - x_offset;
 
-    /* DRAW SCREEN */
+    /* DRAW SCREEN, into the hidden buffer once the last flip is done */
+    DG_WaitBackBuffer();
     line_in  = (unsigned char *) I_VideoBuffer;
     line_out = (unsigned char *) DG_ScreenBuffer;
     
@@ -379,6 +381,7 @@ void I_FinishUpdate (void)
         line_in += SCREENWIDTH;
     }
 
+	DG_Overlay();
 	DG_DrawFrame();
 }
 

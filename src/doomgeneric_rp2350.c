@@ -14,34 +14,45 @@
 #include "ff.h"
 #include "ps2kbd_wrapper.h"
 #include "ps2mouse_wrapper.h"
+#include "ps2mouse.h"
 #include "usbhid_wrapper.h"
+#ifdef USB_HID_ENABLED
+#include "usbhid.h"
+#endif
+#ifdef NESPAD_GPIO_CLK
+#include "nespad.h"
+#endif
 #include "doomkeys.h"
+#include "d_event.h"
 #include "m_argv.h"
+#include "fui.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 
-static void draw_text_5x7(int x, int y, const char *text, pixel_t color);
-static void fill_rect(int x, int y, int w, int h, pixel_t color);
-static int text_width_5x7(const char *text, int scale);
+#include "pico/bootrom.h"
+#include "hardware/structs/psm.h"
 
-static void fill_rect(int x, int y, int w, int h, pixel_t color) {
-    if (w <= 0 || h <= 0) return;
-    if (x < 0) {
-        w += x;
-        x = 0;
+/* Every software reboot goes through here (as frank-ecat's platform_reboot):
+ * core 1, which runs the HDMI line IRQ and reads PSRAM, is forced off and
+ * the PSRAM leaves QPI mode first, or the boot ROM cannot read the flash
+ * after the warm reset and the chip hangs until a power cycle. */
+void __attribute__((noreturn)) platform_reboot(bool bootsel) {
+    if (get_core_num() == 0) {
+        hw_set_bits(&psm_hw->frce_off, PSM_FRCE_OFF_PROC1_BITS);
+        while (!(psm_hw->frce_off & PSM_FRCE_OFF_PROC1_BITS)) tight_loop_contents();
+        busy_wait_us(10);
+        /* released again: it restarts into the boot ROM, which waits for a
+         * launch; left forced off, the bit survives the watchdog reboot and
+         * the chip does not come back */
+        hw_clear_bits(&psm_hw->frce_off, PSM_FRCE_OFF_PROC1_BITS);
+        busy_wait_us(10);
     }
-    if (y < 0) {
-        h += y;
-        y = 0;
-    }
-    if (x + w > DOOMGENERIC_RESX) w = DOOMGENERIC_RESX - x;
-    if (y + h > DOOMGENERIC_RESY) h = DOOMGENERIC_RESY - y;
-    if (w <= 0 || h <= 0) return;
-
-    for (int yy = y; yy < y + h; ++yy) {
-        memset(&DG_ScreenBuffer[yy * DOOMGENERIC_RESX + x], color, (size_t)w);
-    }
+    save_and_disable_interrupts();
+    psram_exit_qpi();
+    if (bootsel) reset_usb_boot(0, 0);
+    watchdog_reboot(0, 0, 10);
+    while (1) tight_loop_contents();
 }
 
 // Game engine type for each IWAD
@@ -58,484 +69,6 @@ typedef struct {
     game_engine_t engine;
 } iwad_entry_t;
 
-static int max_label_width_5x7(const iwad_entry_t *const *entries, int entry_count, int scale) {
-    int max_w = 0;
-    for (int i = 0; i < entry_count; ++i) {
-        const char *label = entries[i]->label;
-        int w = text_width_5x7(label, scale);
-        if (w > max_w) max_w = w;
-    }
-    return max_w;
-}
-
-static void render_iwad_menu_entries(const iwad_entry_t *const *available,
-                                     int available_count,
-                                     int selected,
-                                     int scroll_offset,
-                                     int max_visible,
-                                     int menu_x,
-                                     int menu_y,
-                                     int line_h,
-                                     int menu_w,
-                                     int visible_h,
-                                     int highlight_h) {
-    // Clear menu area.
-    fill_rect(menu_x - 2, menu_y - 2, menu_w + 4, visible_h + 4, 0);
-
-    if (available_count <= 0) {
-        draw_text_5x7(menu_x, menu_y, "NONE", 1);
-        return;
-    }
-
-    int end = scroll_offset + max_visible;
-    if (end > available_count) end = available_count;
-
-    for (int i = scroll_offset; i < end; ++i) {
-        const int y = menu_y + (i - scroll_offset) * line_h;
-        const char *disp = available[i]->label;
-
-        if (i == selected) {
-            fill_rect(menu_x - 2, y - 1, menu_w + 4, highlight_h, 1);
-            draw_text_5x7(menu_x, y, disp, 0);
-        } else {
-            draw_text_5x7(menu_x, y, disp, 1);
-        }
-    }
-
-    // Scroll indicators
-    if (scroll_offset > 0)
-        draw_text_5x7(menu_x + menu_w + 6, menu_y, "^", 1);
-    if (end < available_count)
-        draw_text_5x7(menu_x + menu_w + 6, menu_y + (max_visible - 1) * line_h, "v", 1);
-}
-
-static const uint8_t *glyph_5x7(char ch) {
-    // 5x7 glyphs, bits are MSB->LSB across 5 columns.
-    static const uint8_t glyph_space[7] = {0, 0, 0, 0, 0, 0, 0};
-    static const uint8_t glyph_dot[7] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C};
-    static const uint8_t glyph_comma[7] = {0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C, 0x08};
-    static const uint8_t glyph_colon[7] = {0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00};
-    static const uint8_t glyph_hyphen[7] = {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00};
-    static const uint8_t glyph_lparen[7] = {0x04, 0x08, 0x08, 0x08, 0x08, 0x08, 0x04};
-    static const uint8_t glyph_rparen[7] = {0x04, 0x02, 0x02, 0x02, 0x02, 0x02, 0x04};
-    static const uint8_t glyph_slash[7] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x00, 0x00};
-
-    static const uint8_t glyph_0[7] = {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E};
-    static const uint8_t glyph_1[7] = {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E};
-    static const uint8_t glyph_2[7] = {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F};
-    static const uint8_t glyph_3[7] = {0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E};
-    static const uint8_t glyph_4[7] = {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02};
-    static const uint8_t glyph_5[7] = {0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E};
-    static const uint8_t glyph_6[7] = {0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E};
-    static const uint8_t glyph_7[7] = {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08};
-    static const uint8_t glyph_8[7] = {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E};
-    static const uint8_t glyph_9[7] = {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E};
-
-    static const uint8_t glyph_a[7] = {0x00, 0x00, 0x0E, 0x01, 0x0F, 0x11, 0x0F};
-    static const uint8_t glyph_b[7] = {0x10, 0x10, 0x1E, 0x11, 0x11, 0x11, 0x1E};
-    static const uint8_t glyph_c[7] = {0x00, 0x00, 0x0E, 0x11, 0x10, 0x11, 0x0E};
-    static const uint8_t glyph_d[7] = {0x01, 0x01, 0x0D, 0x13, 0x11, 0x13, 0x0D};
-    static const uint8_t glyph_e[7] = {0x00, 0x00, 0x0E, 0x11, 0x1F, 0x10, 0x0F};
-    static const uint8_t glyph_f[7] = {0x06, 0x08, 0x1E, 0x08, 0x08, 0x08, 0x08};
-    static const uint8_t glyph_g[7] = {0x00, 0x00, 0x0F, 0x11, 0x0F, 0x01, 0x0E};
-    static const uint8_t glyph_h[7] = {0x10, 0x10, 0x1E, 0x11, 0x11, 0x11, 0x11};
-    static const uint8_t glyph_i[7] = {0x04, 0x00, 0x0C, 0x04, 0x04, 0x04, 0x0E};
-    static const uint8_t glyph_j[7] = {0x02, 0x00, 0x06, 0x02, 0x02, 0x12, 0x0C};
-    static const uint8_t glyph_k[7] = {0x10, 0x10, 0x11, 0x12, 0x1C, 0x12, 0x11};
-    static const uint8_t glyph_l[7] = {0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x06};
-    static const uint8_t glyph_m[7] = {0x00, 0x00, 0x1A, 0x15, 0x15, 0x15, 0x15};
-    static const uint8_t glyph_n[7] = {0x00, 0x00, 0x1E, 0x11, 0x11, 0x11, 0x11};
-    static const uint8_t glyph_o[7] = {0x00, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E};
-    static const uint8_t glyph_p[7] = {0x00, 0x00, 0x1E, 0x11, 0x1E, 0x10, 0x10};
-    static const uint8_t glyph_q[7] = {0x00, 0x00, 0x0D, 0x13, 0x13, 0x0D, 0x01};
-    static const uint8_t glyph_r[7] = {0x00, 0x00, 0x16, 0x19, 0x10, 0x10, 0x10};
-    static const uint8_t glyph_s[7] = {0x00, 0x00, 0x0F, 0x10, 0x0E, 0x01, 0x1E};
-    static const uint8_t glyph_t[7] = {0x04, 0x04, 0x1F, 0x04, 0x04, 0x04, 0x03};
-    static const uint8_t glyph_u[7] = {0x00, 0x00, 0x11, 0x11, 0x11, 0x13, 0x0D};
-    static const uint8_t glyph_v[7] = {0x00, 0x00, 0x11, 0x11, 0x11, 0x0A, 0x04};
-    static const uint8_t glyph_w[7] = {0x00, 0x00, 0x11, 0x11, 0x15, 0x15, 0x0A};
-    static const uint8_t glyph_x[7] = {0x00, 0x00, 0x11, 0x0A, 0x04, 0x0A, 0x11};
-    static const uint8_t glyph_y[7] = {0x00, 0x00, 0x11, 0x11, 0x0F, 0x01, 0x0E};
-    static const uint8_t glyph_z[7] = {0x00, 0x00, 0x1F, 0x02, 0x04, 0x08, 0x1F};
-
-    static const uint8_t glyph_A[7] = {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11};
-    static const uint8_t glyph_B[7] = {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E};
-    static const uint8_t glyph_C[7] = {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E};
-    static const uint8_t glyph_D[7] = {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E};
-    static const uint8_t glyph_E[7] = {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F};
-    static const uint8_t glyph_F[7] = {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10};
-    static const uint8_t glyph_G[7] = {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E};
-    static const uint8_t glyph_H[7] = {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11};
-    static const uint8_t glyph_I[7] = {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1F};
-    static const uint8_t glyph_J[7] = {0x07, 0x02, 0x02, 0x02, 0x12, 0x12, 0x0C};
-    static const uint8_t glyph_K[7] = {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11};
-    static const uint8_t glyph_L[7] = {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F};
-    static const uint8_t glyph_M[7] = {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11};
-    static const uint8_t glyph_N[7] = {0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11};
-    static const uint8_t glyph_O[7] = {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
-    static const uint8_t glyph_P[7] = {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10};
-    static const uint8_t glyph_Q[7] = {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D};
-    static const uint8_t glyph_R[7] = {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11};
-    static const uint8_t glyph_S[7] = {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E};
-    static const uint8_t glyph_T[7] = {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
-    static const uint8_t glyph_U[7] = {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
-    static const uint8_t glyph_V[7] = {0x11, 0x11, 0x11, 0x11, 0x0A, 0x0A, 0x04};
-    static const uint8_t glyph_W[7] = {0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A};
-    static const uint8_t glyph_X[7] = {0x11, 0x0A, 0x04, 0x04, 0x04, 0x0A, 0x11};
-    static const uint8_t glyph_Y[7] = {0x11, 0x0A, 0x04, 0x04, 0x04, 0x04, 0x04};
-    static const uint8_t glyph_Z[7] = {0x1F, 0x02, 0x04, 0x08, 0x10, 0x10, 0x1F};
-
-    int c = (unsigned char)ch;
-    switch (c) {
-        case ' ': return glyph_space;
-        case '.': return glyph_dot;
-        case ',': return glyph_comma;
-        case ':': return glyph_colon;
-        case '-': return glyph_hyphen;
-        case '(': return glyph_lparen;
-        case ')': return glyph_rparen;
-        case '/': return glyph_slash;
-
-        case '0': return glyph_0;
-        case '1': return glyph_1;
-        case '2': return glyph_2;
-        case '3': return glyph_3;
-        case '4': return glyph_4;
-        case '5': return glyph_5;
-        case '6': return glyph_6;
-        case '7': return glyph_7;
-        case '8': return glyph_8;
-        case '9': return glyph_9;
-
-        case 'a': return glyph_a;
-        case 'b': return glyph_b;
-        case 'c': return glyph_c;
-        case 'd': return glyph_d;
-        case 'e': return glyph_e;
-        case 'f': return glyph_f;
-        case 'g': return glyph_g;
-        case 'h': return glyph_h;
-        case 'i': return glyph_i;
-        case 'j': return glyph_j;
-        case 'k': return glyph_k;
-        case 'l': return glyph_l;
-        case 'm': return glyph_m;
-        case 'n': return glyph_n;
-        case 'o': return glyph_o;
-        case 'p': return glyph_p;
-        case 'q': return glyph_q;
-        case 'r': return glyph_r;
-        case 's': return glyph_s;
-        case 't': return glyph_t;
-        case 'u': return glyph_u;
-        case 'v': return glyph_v;
-        case 'w': return glyph_w;
-        case 'x': return glyph_x;
-        case 'y': return glyph_y;
-        case 'z': return glyph_z;
-
-        case 'A': return glyph_A;
-        case 'B': return glyph_B;
-        case 'C': return glyph_C;
-        case 'D': return glyph_D;
-        case 'E': return glyph_E;
-        case 'F': return glyph_F;
-        case 'G': return glyph_G;
-        case 'H': return glyph_H;
-        case 'I': return glyph_I;
-        case 'J': return glyph_J;
-        case 'K': return glyph_K;
-        case 'L': return glyph_L;
-        case 'M': return glyph_M;
-        case 'N': return glyph_N;
-        case 'O': return glyph_O;
-        case 'P': return glyph_P;
-        case 'Q': return glyph_Q;
-        case 'R': return glyph_R;
-        case 'S': return glyph_S;
-        case 'T': return glyph_T;
-        case 'U': return glyph_U;
-        case 'V': return glyph_V;
-        case 'W': return glyph_W;
-        case 'X': return glyph_X;
-        case 'Y': return glyph_Y;
-        case 'Z': return glyph_Z;
-
-        default: return glyph_space;
-    }
-}
-
-static void draw_char_5x7(int x, int y, char ch, pixel_t color) {
-    const uint8_t *rows = glyph_5x7(ch);
-    for (int row = 0; row < 7; ++row) {
-        int yy = y + row;
-        if (yy < 0 || yy >= DOOMGENERIC_RESY) continue;
-        uint8_t bits = rows[row];
-        for (int col = 0; col < 5; ++col) {
-            int xx = x + col;
-            if (xx < 0 || xx >= DOOMGENERIC_RESX) continue;
-            if (bits & (1u << (4 - col))) {
-                DG_ScreenBuffer[yy * DOOMGENERIC_RESX + xx] = color;
-            }
-        }
-    }
-}
-
-static void draw_char_5x7_scaled(int x, int y, char ch, pixel_t color, int scale, bool bold) {
-    if (scale <= 1) {
-        draw_char_5x7(x, y, ch, color);
-        if (bold) draw_char_5x7(x + 1, y, ch, color);
-        return;
-    }
-
-    const uint8_t *rows = glyph_5x7(ch);
-    for (int row = 0; row < 7; ++row) {
-        uint8_t bits = rows[row];
-        for (int col = 0; col < 5; ++col) {
-            if (!(bits & (1u << (4 - col)))) continue;
-            const int px = x + col * scale;
-            const int py = y + row * scale;
-            fill_rect(px, py, scale, scale, color);
-            if (bold) fill_rect(px + 1, py, scale, scale, color);
-        }
-    }
-}
-
-static void draw_text_5x7(int x, int y, const char *text, pixel_t color) {
-    const int advance = 6;
-    for (const char *p = text; *p; ++p) {
-        draw_char_5x7(x, y, *p, color);
-        x += advance;
-    }
-}
-
-static void draw_text_5x7_scaled(int x, int y, const char *text, pixel_t color, int scale, bool bold) {
-    const int advance = 6 * (scale <= 0 ? 1 : scale);
-    if (scale <= 0) scale = 1;
-    for (const char *p = text; *p; ++p) {
-        draw_char_5x7_scaled(x, y, *p, color, scale, bold);
-        x += advance;
-    }
-}
-
-static int text_width_5x7(const char *text, int scale) {
-    if (scale <= 0) scale = 1;
-    int n = 0;
-    for (const char *p = text; *p; ++p) n++;
-    return n * 6 * scale;
-}
-
-static void draw_animated_background_border(uint32_t t_ms,
-                                           int panel_x,
-                                           int panel_y,
-                                           int panel_w,
-                                           int panel_h) {
-    const int t = (int)(t_ms / 80);
-
-    if (panel_x < 0) panel_x = 0;
-    if (panel_y < 0) panel_y = 0;
-    if (panel_w < 0) panel_w = 0;
-    if (panel_h < 0) panel_h = 0;
-    if (panel_x + panel_w > DOOMGENERIC_RESX) panel_w = DOOMGENERIC_RESX - panel_x;
-    if (panel_y + panel_h > DOOMGENERIC_RESY) panel_h = DOOMGENERIC_RESY - panel_y;
-
-    const int panel_x2 = panel_x + panel_w;
-    const int panel_y2 = panel_y + panel_h;
-
-    // Top strip.
-    for (int y = 0; y < panel_y; ++y) {
-        for (int x = 0; x < DOOMGENERIC_RESX; ++x) {
-            const int bx = (x >> 3);
-            const int by = (y >> 3);
-            uint8_t v = (uint8_t)((bx + by + t) & 0x0F);
-            v ^= (uint8_t)(((bx << 1) ^ (by + (t >> 1))) & 0x07);
-            DG_ScreenBuffer[y * DOOMGENERIC_RESX + x] = (pixel_t)(2 + (v & 0x0F));
-        }
-    }
-
-    // Bottom strip.
-    for (int y = panel_y2; y < DOOMGENERIC_RESY; ++y) {
-        for (int x = 0; x < DOOMGENERIC_RESX; ++x) {
-            const int bx = (x >> 3);
-            const int by = (y >> 3);
-            uint8_t v = (uint8_t)((bx + by + t) & 0x0F);
-            v ^= (uint8_t)(((bx << 1) ^ (by + (t >> 1))) & 0x07);
-            DG_ScreenBuffer[y * DOOMGENERIC_RESX + x] = (pixel_t)(2 + (v & 0x0F));
-        }
-    }
-
-    // Left/right strips.
-    for (int y = panel_y; y < panel_y2; ++y) {
-        for (int x = 0; x < panel_x; ++x) {
-            const int bx = (x >> 3);
-            const int by = (y >> 3);
-            uint8_t v = (uint8_t)((bx + by + t) & 0x0F);
-            v ^= (uint8_t)(((bx << 1) ^ (by + (t >> 1))) & 0x07);
-            DG_ScreenBuffer[y * DOOMGENERIC_RESX + x] = (pixel_t)(2 + (v & 0x0F));
-        }
-        for (int x = panel_x2; x < DOOMGENERIC_RESX; ++x) {
-            const int bx = (x >> 3);
-            const int by = (y >> 3);
-            uint8_t v = (uint8_t)((bx + by + t) & 0x0F);
-            v ^= (uint8_t)(((bx << 1) ^ (by + (t >> 1))) & 0x07);
-            DG_ScreenBuffer[y * DOOMGENERIC_RESX + x] = (pixel_t)(2 + (v & 0x0F));
-        }
-    }
-}
-
-static void fade_start_screen_bg_to_black(const uint32_t bg_pal[16], uint32_t title_hl_rgb, int steps, int step_delay_ms) {
-    if (steps <= 0) return;
-    if (step_delay_ms < 0) step_delay_ms = 0;
-
-    for (int s = 0; s <= steps; ++s) {
-        const int num = steps - s;
-        const int den = steps;
-
-        for (int i = 0; i < 16; ++i) {
-            const uint32_t base = bg_pal[i];
-            uint32_t r = (base >> 16) & 0xFF;
-            uint32_t g = (base >> 8) & 0xFF;
-            uint32_t b = base & 0xFF;
-            r = (r * (uint32_t)num) / (uint32_t)den;
-            g = (g * (uint32_t)num) / (uint32_t)den;
-            b = (b * (uint32_t)num) / (uint32_t)den;
-            graphics_set_palette(2 + i, (r << 16) | (g << 8) | b);
-        }
-
-        {
-            const uint32_t base = title_hl_rgb;
-            uint32_t r = (base >> 16) & 0xFF;
-            uint32_t g = (base >> 8) & 0xFF;
-            uint32_t b = base & 0xFF;
-            r = (r * (uint32_t)num) / (uint32_t)den;
-            g = (g * (uint32_t)num) / (uint32_t)den;
-            b = (b * (uint32_t)num) / (uint32_t)den;
-            graphics_set_palette(18, (r << 16) | (g << 8) | b);
-        }
-
-        if (step_delay_ms) sleep_ms((uint32_t)step_delay_ms);
-    }
-}
-
-static int ascii_tolower(int c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A' + 'a';
-    return c;
-}
-
-static int ascii_strcasecmp(const char *a, const char *b) {
-    while (*a && *b) {
-        int ca = ascii_tolower((unsigned char)*a);
-        int cb = ascii_tolower((unsigned char)*b);
-        if (ca != cb) return ca - cb;
-        ++a;
-        ++b;
-    }
-    return ascii_tolower((unsigned char)*a) - ascii_tolower((unsigned char)*b);
-}
-
-static bool has_wad_extension(const char *name) {
-    size_t n = strlen(name);
-    if (n < 4) return false;
-    return (ascii_tolower((unsigned char)name[n - 4]) == '.'
-         && ascii_tolower((unsigned char)name[n - 3]) == 'w'
-         && ascii_tolower((unsigned char)name[n - 2]) == 'a'
-         && ascii_tolower((unsigned char)name[n - 1]) == 'd');
-}
-
-// All known IWADs across all supported games
-typedef struct {
-    const char *filename;
-    game_engine_t engine;
-} known_iwad_t;
-
-static const known_iwad_t known_iwads[] = {
-    // Doom IWADs
-    {"doom2.wad",     ENGINE_DOOM},
-    {"doom.wad",      ENGINE_DOOM},
-    {"doom1.wad",     ENGINE_DOOM},
-    {"plutonia.wad",  ENGINE_DOOM},
-    {"tnt.wad",       ENGINE_DOOM},
-    {"doom2f.wad",    ENGINE_DOOM},
-    {"freedoom2.wad", ENGINE_DOOM},
-    {"freedoom1.wad", ENGINE_DOOM},
-    {"freedm.wad",    ENGINE_DOOM},
-    {"chex.wad",      ENGINE_DOOM},
-    {"hacx.wad",      ENGINE_DOOM},
-    // Heretic IWADs
-    {"heretic.wad",   ENGINE_HERETIC},
-    {"heretic1.wad",  ENGINE_HERETIC},
-    // Hexen IWADs
-    {"hexen.wad",     ENGINE_HEXEN},
-    {"hexdd.wad",     ENGINE_HEXEN},
-    // Strife IWADs
-    {"strife1.wad",   ENGINE_STRIFE},
-    {"strife0.wad",   ENGINE_STRIFE},
-};
-
-// Number of known IWADs
-#define NUM_KNOWN_IWADS (sizeof(known_iwads) / sizeof(known_iwads[0]))
-
-static void print_available_wads_to_console(void) {
-    printf("\n=== WAD scan (/ and /idtech1) ===\n");
-    fflush(stdout);
-
-    printf("Compatible IWAD filenames:\n");
-    int compatible_found = 0;
-    for (size_t i = 0; i < NUM_KNOWN_IWADS; ++i) {
-        FILINFO info;
-        if (f_stat(known_iwads[i].filename, &info) == FR_OK) {
-            printf("  [FOUND] %s (root)\n", known_iwads[i].filename);
-            compatible_found++;
-        }
-        char subpath[64];
-        snprintf(subpath, sizeof(subpath), "idtech1/%s", known_iwads[i].filename);
-        if (f_stat(subpath, &info) == FR_OK) {
-            printf("  [FOUND] %s (idtech1/)\n", known_iwads[i].filename);
-            compatible_found++;
-        }
-    }
-    if (!compatible_found) {
-        printf("  (none found by standard IWAD names)\n");
-    }
-    fflush(stdout);
-
-    // Scan both root and /idtech1/ for other .wad files.
-    static const char *const scan_dirs[] = { "/", "/idtech1" };
-    printf("Other .wad files:\n");
-    int other_count = 0;
-    for (int d = 0; d < 2; ++d) {
-        DIR dir;
-        FILINFO fno;
-        FRESULT fr = f_opendir(&dir, scan_dirs[d]);
-        if (fr != FR_OK) continue;
-
-        for (;;) {
-            fr = f_readdir(&dir, &fno);
-            if (fr != FR_OK || fno.fname[0] == 0) break;
-
-            if (fno.fattrib & AM_DIR) continue;
-            if (!has_wad_extension(fno.fname)) continue;
-
-            bool known = false;
-            for (size_t i = 0; i < NUM_KNOWN_IWADS; ++i) {
-                if (ascii_strcasecmp(fno.fname, known_iwads[i].filename) == 0) { known = true; break; }
-            }
-            if (known) continue;
-
-            printf("  %s (%s)\n", fno.fname, scan_dirs[d]);
-            other_count++;
-        }
-        f_closedir(&dir);
-    }
-
-    if (!other_count) {
-        printf("  (none)\n");
-    }
-
-    printf("=== Press Enter to start ===\n\n");
-    fflush(stdout);
-}
-
 // External variables from i_video.c (when CMAP256 is defined)
 extern boolean palette_changed;
 
@@ -547,54 +80,58 @@ extern struct {
     uint8_t a;
 } colors[256];
 
-// Only available when USB CDC stdio is enabled (not in USB HID host builds).
-#if PICO_STDIO_USB
-#include "pico/stdio_usb.h"
-#endif
-
 // External stdio init for FatFS
 extern void stdio_fatfs_init(void);
 
 // Global FatFs object
 FATFS fs;
 
+// The engine is running (past the WAD selector): F12 opens the settings
+static bool in_game;
+static bool settings_requested;
+
+// The WAD being played (for "start at boot")
+const char *dg_current_wad = "";
+
 void install_fault_handler(void);
+
+static FRESULT mount_sd(void) {
+    FRESULT fr = FR_NOT_READY;
+    for (int attempt = 0; attempt < 3 && fr != FR_OK; attempt++) fr = f_mount(&fs, "", 1);
+    return fr;
+}
 
 void DG_Init() {
     install_fault_handler();
+
+    // The SD card first: frank-idtech1.ini may change the CPU and PSRAM
+    // clocks, which has to happen before PSRAM and HDMI are set up. FatFs
+    // takes its buffers from the SRAM heap until PSRAM works.
+    psram_set_sram_mode(1);
+    FRESULT fr = mount_sd();
+    if (fr == FR_OK && fui_cfg_boot()) {
+        f_mount(NULL, "", 0);
+        fr = mount_sd();
+    }
 
     // Initialize PSRAM (pin auto-detected based on chip package)
     uint psram_pin = get_psram_pin();
     psram_init(psram_pin);
     psram_set_sram_mode(0); // Use PSRAM
 
-    // Allocate screen buffer in PSRAM
-    DG_ScreenBuffer = (pixel_t*)psram_malloc(DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t));
-    if (!DG_ScreenBuffer) {
-        panic("DG_Init: OOM for Screen Buffer");
-    }
-
-    // Clear screen buffer to black
-    memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t));
+    // Two screen buffers in PSRAM, flipped at vblank (src/fui_video.c);
+    // DG_ScreenBuffer is always the hidden one
+    fui_video_init();
 
     // Initialize HDMI
     graphics_init(g_out_HDMI);
     graphics_set_res(320, 240);
-    graphics_set_buffer((uint8_t*)DG_ScreenBuffer);
+    graphics_set_buffer(fui_front());
+    fui_cfg_apply_shift();
 
-    // Mount SD Card
-    FRESULT fr = f_mount(&fs, "", 1);
     if (fr != FR_OK) {
-        // Show error on screen instead of panic
-        graphics_set_palette(0, 0x000000);
-        graphics_set_palette(1, 0xFF4444);
-        graphics_set_palette(2, 0xFFFFFF);
-        memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t));
-        draw_text_5x7_scaled(40, 80, "SD CARD ERROR", 1, 3, true);
-        draw_text_5x7(40, 120, "Failed to mount SD card.", 2);
-        draw_text_5x7(40, 140, "Check that an SD card is inserted", 2);
-        draw_text_5x7(40, 150, "and formatted as FAT32.", 2);
-        for (;;) sleep_ms(1000);
+        fui_shell_error("NO SD CARD", "Failed to mount the SD card.",
+                        "Insert a FAT32 card with the WADs.", "Restart once the card is in");
     }
 
     // Set current directory to root (required for relative paths)
@@ -603,311 +140,558 @@ void DG_Init() {
     // Initialize stdio wrapper for FatFS
     stdio_fatfs_init();
 
+#if (defined(FRANK_UART_CONSOLE) || defined(FRANK_NO_PS2_MOUSE)) && (defined(BOARD_M2) || defined(BOARD_Z0))
+    ps2kbd_init();             // M2: the mouse's GPIO0/1 belong to the bench
+#elif defined(FRANK_UART_CONSOLE)
+    ps2mouse_wrapper_init();   // M1: the console has the keyboard's GPIO0/1
+#else
     // Initialize PS/2 Keyboard
     ps2kbd_init();
 
     // Initialize PS/2 Mouse
     ps2mouse_wrapper_init();
+#endif
 
-    // Initialize USB HID (keyboard/mouse) if enabled
+    // USB keyboard, mouse and gamepads on the native USB port
     usbhid_wrapper_init();
+
+#ifdef NESPAD_GPIO_CLK
+    // NES/SNES pad on the joystick port
+    nespad_begin(clock_get_hz(clk_sys) / 1000, NESPAD_GPIO_CLK, NESPAD_GPIO_DATA, NESPAD_GPIO_LATCH);
+#endif
 }
 
 void DG_StartScreen(void) {
-    // Solid black background using palette index 0.
-    graphics_set_palette(0, 0x000000);
-    graphics_set_palette(1, 0xFFFFFF);
-    // Reserved for the loading window text/border (keep bright even after we dim UI text).
-    graphics_set_palette(20, 0xFFFFFF);
-
-    // Background palette (2..17): brighter blue theme.
-    static const uint32_t bg_pal[16] = {
-        0x020308, 0x040610, 0x060918, 0x080C20,
-        0x0A0F28, 0x0C1230, 0x0E1538, 0x101840,
-        0x121B48, 0x141E50, 0x162158, 0x182460,
-        0x1A2768, 0x1C2A70, 0x1E2D78, 0x203080,
-    };
-    for (int i = 0; i < 16; ++i) {
-        graphics_set_palette(2 + i, bg_pal[i]);
-    }
-
-    // Title highlight: 20% brighter than the brightest background green.
-    uint32_t title_hl_rgb;
-    {
-        const uint32_t base = bg_pal[15];
-        uint32_t r = (base >> 16) & 0xFF;
-        uint32_t g = (base >> 8) & 0xFF;
-        uint32_t b = base & 0xFF;
-        r = (r * 6) / 5;
-        g = (g * 6) / 5;
-        b = (b * 6) / 5;
-        if (r > 255) r = 255;
-        if (g > 255) g = 255;
-        if (b > 255) b = 255;
-        title_hl_rgb = (r << 16) | (g << 8) | b;
-        graphics_set_palette(18, title_hl_rgb);
-    }
-    memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t));
-
-    // All IWADs for selection menu (Doom + Heretic).
+    // All IWADs for the selector
     static const iwad_entry_t game_iwads[] = {
-        {"doom2.wad",    "DOOM II (doom2.wad)",            ENGINE_DOOM},
-        {"doom.wad",     "DOOM (doom.wad)",                ENGINE_DOOM},
-        {"doom1.wad",    "DOOM SHAREWARE (doom1.wad)",     ENGINE_DOOM},
-        {"plutonia.wad", "FINAL DOOM: PLUTONIA",           ENGINE_DOOM},
-        {"tnt.wad",      "FINAL DOOM: TNT (tnt.wad)",     ENGINE_DOOM},
-        {"freedoom2.wad","FREEDOOM PHASE 2",               ENGINE_DOOM},
-        {"freedoom1.wad","FREEDOOM PHASE 1",               ENGINE_DOOM},
-        {"freedm.wad",   "FREEDM (freedm.wad)",           ENGINE_DOOM},
-        {"chex.wad",     "CHEX QUEST (chex.wad)",          ENGINE_DOOM},
-        {"hacx.wad",     "HACX (hacx.wad)",                ENGINE_DOOM},
-        {"heretic.wad",  "HERETIC (heretic.wad)",          ENGINE_HERETIC},
-        {"heretic1.wad", "HERETIC SHAREWARE",              ENGINE_HERETIC},
-        {"hexen.wad",    "HEXEN (hexen.wad)",              ENGINE_HEXEN},
-        {"hexdd.wad",    "HEXEN: DEATHKINGS",              ENGINE_HEXEN},
-        {"strife1.wad",  "STRIFE (strife1.wad)",           ENGINE_STRIFE},
-        {"strife0.wad",  "STRIFE DEMO (strife0.wad)",      ENGINE_STRIFE},
+        {"doom2.wad",    "DOOM II",                ENGINE_DOOM},
+        {"doom.wad",     "The Ultimate DOOM",      ENGINE_DOOM},
+        {"doom1.wad",    "DOOM Shareware",         ENGINE_DOOM},
+        {"plutonia.wad", "Final DOOM: Plutonia",   ENGINE_DOOM},
+        {"tnt.wad",      "Final DOOM: TNT",        ENGINE_DOOM},
+        {"freedoom2.wad","Freedoom Phase 2",       ENGINE_DOOM},
+        {"freedoom1.wad","Freedoom Phase 1",       ENGINE_DOOM},
+        {"freedm.wad",   "FreeDM",                 ENGINE_DOOM},
+        {"chex.wad",     "Chex Quest",             ENGINE_DOOM},
+        {"hacx.wad",     "HACX",                   ENGINE_DOOM},
+        {"heretic.wad",  "Heretic",                ENGINE_HERETIC},
+        {"heretic1.wad", "Heretic Shareware",      ENGINE_HERETIC},
+        {"hexen.wad",    "Hexen",                  ENGINE_HEXEN},
+        {"hexdd.wad",    "Hexen: Deathkings",      ENGINE_HEXEN},
+        {"strife1.wad",  "Strife",                 ENGINE_STRIFE},
+        {"strife0.wad",  "Strife Demo",            ENGINE_STRIFE},
     };
-
-    const int panel_x = 16;
-    const int panel_y = 16;
-    const int panel_w = DOOMGENERIC_RESX - 32;
-    const int panel_h = DOOMGENERIC_RESY - 32;
-
-    const int menu_x = panel_x + 4;
-    const int menu_y = panel_y + 56;
-    const int line_h = 10;
-    const int highlight_h = 9;
+    enum { N_IWADS = sizeof(game_iwads) / sizeof(game_iwads[0]) };
 
     // Build list of available IWADs.
     // The game engine searches in "idtech1" subdir (see d_iwad.c BuildIWADDirList),
     // so check both root and /idtech1/ on the SD card.
-    const iwad_entry_t *available[sizeof(game_iwads) / sizeof(game_iwads[0])];
-    int available_count = 0;
-    for (size_t i = 0; i < sizeof(game_iwads) / sizeof(game_iwads[0]); ++i) {
+    const iwad_entry_t *available[N_IWADS];
+    fui_wad_t list[N_IWADS];
+    int available_count = 0, autostart = -1;
+    for (int i = 0; i < N_IWADS; ++i) {
         FILINFO info;
-        if (f_stat(game_iwads[i].filename, &info) == FR_OK) {
-            available[available_count++] = &game_iwads[i];
-            continue;
-        }
-        // Also check /idtech1/ subdirectory.
         char subpath[64];
         snprintf(subpath, sizeof(subpath), "idtech1/%s", game_iwads[i].filename);
-        if (f_stat(subpath, &info) == FR_OK) {
-            available[available_count++] = &game_iwads[i];
+        if (f_stat(game_iwads[i].filename, &info) == FR_OK || f_stat(subpath, &info) == FR_OK) {
+            if (!strcmp(fui_cfg.autostart, game_iwads[i].filename)) autostart = available_count;
+            available[available_count] = &game_iwads[i];
+            list[available_count] = (fui_wad_t){game_iwads[i].label, game_iwads[i].filename, NULL};
+            available_count++;
         }
     }
 
-    const int bottom_y0 = panel_y + panel_h - 32;
-    const int max_visible = (bottom_y0 - menu_y - 4) / line_h;  // fit between menu and status text
-    const int visible_h = max_visible * line_h;
-    int scroll_offset = 0;
-    int selected = 0;
-
-#ifndef FRANK_VERSION
-#define FRANK_VERSION "?"
-#endif
-
-    const char *title_left = "FRANK IDTECH1";
-    char title_right[96];
-    snprintf(title_right, sizeof(title_right), " by Mikhail Matveev v%s", FRANK_VERSION);
-
-    // Print WAD scan after ~3s or as soon as USB CDC is connected.
-    const uint32_t start_ms = to_ms_since_boot(get_absolute_time());
-    bool printed = false;
-    bool printed_while_disconnected = false;
-
-    const int title_scale = 1;
-    const int title_left_w = text_width_5x7(title_left, title_scale);
-    const int title_right_w = text_width_5x7(title_right, title_scale);
-    const int title_w = title_left_w + title_right_w;
-    const int title_x = (DOOMGENERIC_RESX - title_w) / 2;
-
-    // Status lines
-#ifndef DBOARD_VARIANT
-#if defined(BOARD_M2)
-#define DBOARD_VARIANT "M2"
-#else
-#define DBOARD_VARIANT "M1"
-#endif
-#endif
-#ifndef DPSRAM_SPEED
-#define DPSRAM_SPEED PSRAM_MAX_FREQ_MHZ
-#endif
-
-#ifndef DCPU_SPEED
-#define DCPU_SPEED CPU_CLOCK_MHZ
-#endif
-
-    const char *cfg = DBOARD_VARIANT;
-    const uint32_t cpu_mhz = (uint32_t)DCPU_SPEED;
-    const uint32_t psram_cs = get_psram_pin();
-    char status1[96];
-    char status2[96];
-    snprintf(status1, sizeof(status1), "Up/Down: select, Enter: confirm");
-    snprintf(status2, sizeof(status2), "%s, FREQ: %lu MHz, PSRAM: %d MHz, CS: %lu",
-             cfg,
-             (unsigned long)cpu_mhz,
-             (int)DPSRAM_SPEED,
-             (unsigned long)psram_cs);
-    const char *status3 = "https://github.com/rh1tech/frank-idtech1";
-
-    // Compute menu width from available labels.
-    const int menu_w = (available_count > 0 ? max_label_width_5x7(available, available_count, 1) : (6 * 4));
-
-    draw_animated_background_border(to_ms_since_boot(get_absolute_time()), panel_x, panel_y, panel_w, panel_h);
-    fill_rect(panel_x, panel_y, panel_w, panel_h, 0);
-    // Highlight "FRANK IDTECH1" with green background and black text.
-    const int title_y = panel_y + 10;
-    fill_rect(title_x - 2, title_y - 2, title_left_w + 4, 7 * title_scale + 4, 18);
-    draw_text_5x7_scaled(title_x, title_y, title_left, 0, title_scale, false);
-    draw_text_5x7_scaled(title_x + title_left_w, title_y, title_right, 1, title_scale, false);
-
-    draw_text_5x7(menu_x, menu_y - 14, "Select WAD:", 1);
-    draw_text_5x7(menu_x, bottom_y0 + 0, status1, 1);
-    draw_text_5x7(menu_x, bottom_y0 + 10, status2, 1);
-    draw_text_5x7(menu_x, bottom_y0 + 20, status3, 1);
-    render_iwad_menu_entries(available, available_count, selected, scroll_offset, max_visible, menu_x, menu_y, line_h, menu_w, visible_h, highlight_h);
-
-    int prev_selected = selected;
-
-    // Wait for Enter.
-    while (true) {
-        const uint32_t now_ms = to_ms_since_boot(get_absolute_time());
-        draw_animated_background_border(now_ms, panel_x, panel_y, panel_w, panel_h);
-
-        if (prev_selected != selected) {
-            // Adjust scroll to keep selection visible
-            if (selected < scroll_offset) scroll_offset = selected;
-            if (selected >= scroll_offset + max_visible) scroll_offset = selected - max_visible + 1;
-            render_iwad_menu_entries(available, available_count, selected, scroll_offset, max_visible, menu_x, menu_y, line_h, menu_w, visible_h, highlight_h);
-            prev_selected = selected;
-        }
-
-        bool usb_connected = true;
-#if PICO_STDIO_USB
-        usb_connected = stdio_usb_connected();
-#endif
-
-        if (!printed) {
-            const uint32_t elapsed_ms = to_ms_since_boot(get_absolute_time()) - start_ms;
-            if (usb_connected || elapsed_ms >= 3000) {
-                print_available_wads_to_console();
-                printed = true;
-                printed_while_disconnected = !usb_connected;
-            }
-        } else if (printed_while_disconnected && usb_connected) {
-            print_available_wads_to_console();
-            printed_while_disconnected = false;
-        }
-
-        int pressed = 0;
-        unsigned char key = 0;
-        while (DG_GetKey(&pressed, &key)) {
-            if (pressed && key == KEY_ENTER && available_count > 0) {
-                // Dim existing UI text.
-                graphics_set_palette(1, 0x404040);
-
-                // Title left was previously black-on-green; redraw it using the (now grey) text color.
-                draw_text_5x7_scaled(title_x, title_y, title_left, 1, title_scale, false);
-
-                // Remove selection inversion.
-                render_iwad_menu_entries(available, available_count, -1, scroll_offset, max_visible, menu_x, menu_y, line_h, menu_w, visible_h, highlight_h);
-
-                // Fade out the start-screen background.
-                fade_start_screen_bg_to_black(bg_pal, title_hl_rgb, 10, 20);
-
-                char msg[96];
-                snprintf(msg, sizeof(msg), "Loading WAD: %s...", available[selected]->filename);
-
-                const int pad_x = 10;
-                const int pad_y = 8;
-                const int msg_w = text_width_5x7(msg, 1);
-                int win_w = msg_w + pad_x * 2;
-                if (win_w > DOOMGENERIC_RESX - 40) win_w = DOOMGENERIC_RESX - 40;
-                const int win_h = 7 + pad_y * 2;
-                const int win_x = (DOOMGENERIC_RESX - win_w) / 2;
-                const int win_y = (DOOMGENERIC_RESY - win_h) / 2;
-
-                fill_rect(win_x, win_y, win_w, win_h, 0);
-                // Border
-                fill_rect(win_x, win_y, win_w, 1, 20);
-                fill_rect(win_x, win_y + win_h - 1, win_w, 1, 20);
-                fill_rect(win_x, win_y, 1, win_h, 20);
-                fill_rect(win_x + win_w - 1, win_y, 1, win_h, 20);
-
-                draw_text_5x7(win_x + pad_x, win_y + pad_y, msg, 20);
-
-                // Set the active game engine based on the selected WAD
-                extern int active_game;
-                active_game = (int)available[selected]->engine;
-
-                static char *new_argv[4];
-                if (available[selected]->engine == ENGINE_DOOM) {
-                    new_argv[0] = (char *)"doom";
-                } else if (available[selected]->engine == ENGINE_HEXEN) {
-                    new_argv[0] = (char *)"hexen";
-                } else if (available[selected]->engine == ENGINE_STRIFE) {
-                    new_argv[0] = (char *)"strife";
-                } else {
-                    new_argv[0] = (char *)"heretic";
-                }
-                new_argv[1] = (char *)"-iwad";
-                new_argv[2] = (char *)available[selected]->filename;
-                new_argv[3] = NULL;
-                myargc = 3;
-                myargv = new_argv;
-                return;
-            }
-
-            if (!pressed || available_count <= 0) continue;
-
-            if (key == KEY_UPARROW || key == 'w' || key == 'W') {
-                selected = (selected - 1 + available_count) % available_count;
-            } else if (key == KEY_DOWNARROW || key == 's' || key == 'S') {
-                selected = (selected + 1) % available_count;
-            }
-        }
-        sleep_ms(33);
+    if (available_count == 0) {
+        fui_shell_error("NO WAD FOUND", "Put an IWAD (doom2.wad, heretic.wad,",
+                        "hexen.wad, strife1.wad...) in / or /idtech1", "Restart once the WAD is there");
     }
+
+    const int selected = fui_shell_select(list, available_count, autostart,
+                                          fui_clocks_reverted ? "Clocks reset: the last start failed" : NULL);
+
+    // Set the active game engine based on the selected WAD
+    extern int active_game;
+    active_game = (int)available[selected]->engine;
+
+    static char *new_argv[4];
+    if (available[selected]->engine == ENGINE_DOOM) {
+        new_argv[0] = (char *)"doom";
+    } else if (available[selected]->engine == ENGINE_HEXEN) {
+        new_argv[0] = (char *)"hexen";
+    } else if (available[selected]->engine == ENGINE_STRIFE) {
+        new_argv[0] = (char *)"strife";
+    } else {
+        new_argv[0] = (char *)"heretic";
+    }
+    new_argv[1] = (char *)"-iwad";
+    new_argv[2] = (char *)available[selected]->filename;
+    new_argv[3] = NULL;
+    myargc = 3;
+    myargv = new_argv;
+    dg_current_wad = available[selected]->filename;
+    in_game = true;
 }
 
-extern volatile uint32_t hdmi_irq_count;
+//--------------------------------------------------------------------
+// Frames
+//--------------------------------------------------------------------
 
+int show_fps = 0;  // "show_fps" in the config: frame rate in the top right
+
+static uint8_t fps_ink, fps_shadow;  // the palette's brightest and darkest
+static bool fps_inks_stale = true;
+
+static void find_fps_inks(void) {
+    int hi = -1, lo = 1 << 30;
+    for (int i = 0; i < 240; i++) {
+        const int l = colors[i].r * 3 + colors[i].g * 6 + colors[i].b;
+        if (l > hi) { hi = l; fps_ink = (uint8_t)i; }
+        if (l < lo) { lo = l; fps_shadow = (uint8_t)i; }
+    }
+    fps_inks_stale = false;
+}
+
+// I_FinishUpdate, after the frame is in DG_ScreenBuffer
+void DG_Overlay(void) {
+    static uint32_t t0, frames;
+    static char text[12];
+    frames++;
+    const uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (now - t0 >= 1000) {
+        snprintf(text, sizeof(text), "%lu FPS", (unsigned long)(frames * 1000 / (now - t0)));
+        t0 = now;
+        frames = 0;
+    }
+    if (!show_fps || !text[0]) return;
+    if (fps_inks_stale) find_fps_inks();
+    const int x = FUI_W - 3 - fui_text_w(text);
+    fui_text(x + 1, 3, text, fps_shadow);
+    fui_text(x, 2, text, fps_ink);
+}
+
+// The engine's frame is in DG_ScreenBuffer: show it at the next vblank,
+// with the palette if it changed (both in the same blank)
 void DG_DrawFrame() {
-    if (palette_changed) {
+    const bool pal = palette_changed;
+    if (pal) {
         for (int i = 0; i < 256; i++) {
             uint32_t color = (colors[i].r << 16) | (colors[i].g << 8) | colors[i].b;
-            graphics_set_palette(i, color);
+            graphics_stage_palette((uint8_t)i, color);
         }
         palette_changed = false;
+        fps_inks_stale = true;
     }
+    fui_game_frame(pal);
 }
+
+// I_FinishUpdate: wait for the last flip before drawing into the hidden buffer
+void DG_WaitBackBuffer(void) {
+    fui_wait_back();
+}
+
+// Game time stops while the settings window is open
+static uint32_t paused_ms;
 
 void DG_SleepMs(uint32_t ms) {
     sleep_ms(ms);
 }
 
 uint32_t DG_GetTicksMs() {
-    return to_ms_since_boot(get_absolute_time());
+    return to_ms_since_boot(get_absolute_time()) - paused_ms;
 }
 
-int DG_GetKey(int* pressed, unsigned char* key) {
+//--------------------------------------------------------------------
+// Mouse
+//--------------------------------------------------------------------
+
+// Shared by the PS/2 and USB mice: clamp, scale, accelerate, invert, post
+// ev_mouse. Y > 0: the mouse moved away from the user (forward).
+#define MOUSE_MAX_DELTA 40
+
+int mouse_invert_y = 0;  // "mouse_invert_y" in the config (m_config.c)
+int mouse_invert_x = 0;  // "mouse_invert_x"
+int mouse_novert = 0;    // "novert": the mouse only turns
+int mouse_scale = 2;     // "mouse_scale": counts to game units, 1..8
+extern float mouse_acceleration;  // src/common/i_video.c, as Chocolate Doom's
+extern int mouse_threshold;
+
+static int clamp_delta(int v) {
+    return v > MOUSE_MAX_DELTA ? MOUSE_MAX_DELTA : v < -MOUSE_MAX_DELTA ? -MOUSE_MAX_DELTA : v;
+}
+
+// Chocolate Doom's AccelerateMouse: past the threshold, faster
+static int accelerate(int v) {
+    if (v < 0) return -accelerate(-v);
+    if (mouse_threshold > 0 && v > mouse_threshold)
+        return (int)((v - mouse_threshold) * mouse_acceleration + mouse_threshold);
+    return v;
+}
+
+void DG_PostMouse(int buttons, int dx, int dy, int wheel) {
+    (void)wheel;
+    event_t ev;
+    ev.type = ev_mouse;
+    ev.data1 = buttons & 0x07;
+    ev.data2 = accelerate(clamp_delta(mouse_invert_x ? -dx : dx) * mouse_scale);
+    ev.data3 = mouse_novert ? 0 : accelerate(clamp_delta(mouse_invert_y ? -dy : dy) * mouse_scale);
+    ev.data4 = 0;
+    D_PostEvent(&ev);
+}
+
+static void usb_poll(void) {
+    static uint32_t last_us;
+    const uint32_t now = time_us_32();
+    if (now - last_us < 1000) return;  // at most once a millisecond
+    last_us = now;
+    usbhid_wrapper_poll();
+}
+
+static uint8_t usb_prev_buttons;
+
+static void usb_mouse_tick(void) {
+    int dx, dy, wheel;
+    uint8_t buttons;
+    if (!usbhid_wrapper_get_mouse(&dx, &dy, &wheel, &buttons)) return;
+    if (dx || dy || buttons != usb_prev_buttons) {
+        DG_PostMouse(buttons, dx, dy, wheel);
+        usb_prev_buttons = buttons;
+    }
+}
+
+//--------------------------------------------------------------------
+// Keys made up here: the gamepad's, and releases after the settings
+//--------------------------------------------------------------------
+
+#define SYNTH_KEYS 32
+static struct { uint8_t pressed, key; } synth[SYNTH_KEYS];
+static unsigned synth_wr, synth_rd;
+
+static void synth_key(int pressed, int key) {
+    if (synth_wr - synth_rd < SYNTH_KEYS) {
+        synth[synth_wr % SYNTH_KEYS].pressed = (uint8_t)pressed;
+        synth[synth_wr % SYNTH_KEYS].key = (uint8_t)key;
+        synth_wr++;
+    }
+}
+
+static int synth_pop(int *pressed, unsigned char *key) {
+    if (synth_rd == synth_wr) return 0;
+    *pressed = synth[synth_rd % SYNTH_KEYS].pressed;
+    *key = synth[synth_rd % SYNTH_KEYS].key;
+    synth_rd++;
+    return 1;
+}
+
+//--------------------------------------------------------------------
+// Gamepad
+//--------------------------------------------------------------------
+
+// The buttons as the games number them (joyb_* in the config)
+enum { JB_A, JB_B, JB_X, JB_Y, JB_LB, JB_RB, JB_LT, JB_RT, JB_L3, JB_R3 };
+
+int gamepad_dead_zone = 20;   // "gamepad_dead_zone", percent of full deflection
+int gamepad_invert_look = 0;  // "gamepad_invert_look"
+int gamepad_swap_sticks = 0;  // "gamepad_swap_sticks": left stick turns, right strafes
+
+// pad buttons -> the keys they stand for, by context
+typedef struct { uint16_t bit; uint8_t key; } pad_key_t;
+
+static const pad_key_t pad_game_keys[] = {
+    {GP_UP, KEY_UPARROW}, {GP_DOWN, KEY_DOWNARROW}, {GP_LEFT, KEY_LEFTARROW},
+    {GP_RIGHT, KEY_RIGHTARROW}, {GP_START, KEY_ESCAPE}, {GP_BACK, KEY_F12},
+};
+static const pad_key_t pad_menu_keys[] = {  // the game's menu is open
+    {GP_UP, KEY_UPARROW}, {GP_DOWN, KEY_DOWNARROW}, {GP_LEFT, KEY_LEFTARROW},
+    {GP_RIGHT, KEY_RIGHTARROW}, {GP_START, KEY_ESCAPE}, {GP_BACK, KEY_F12},
+    {GP_A, KEY_ENTER}, {GP_RT, KEY_ENTER}, {GP_B, KEY_BACKSPACE}, {GP_Y, 'y'}, {GP_X, 'n'},
+};
+static const pad_key_t pad_ui_keys[] = {    // the welcome screen and settings
+    {GP_UP, KEY_UPARROW}, {GP_DOWN, KEY_DOWNARROW}, {GP_LEFT, KEY_LEFTARROW},
+    {GP_RIGHT, KEY_RIGHTARROW}, {GP_A, KEY_ENTER}, {GP_RT, KEY_ENTER}, {GP_START, KEY_ENTER},
+    {GP_B, KEY_ESCAPE}, {GP_BACK, KEY_F12}, {GP_X, KEY_BACKSPACE},
+    {GP_LB, KEY_PGUP}, {GP_RB, KEY_PGDN},
+};
+
+static const pad_key_t *pad_held_map;
+static int pad_held_n;
+static uint16_t pad_held;  // buttons standing for keys that are down
+
+// Press and release the keys the pad's buttons stand for in this context
+static void pad_keys(uint16_t buttons, const pad_key_t *map, int n) {
+    if (map != pad_held_map) {  // context changed: let go of the old keys
+        for (int i = 0; i < pad_held_n; i++)
+            if (pad_held & pad_held_map[i].bit) synth_key(0, pad_held_map[i].key);
+        pad_held = 0;
+        pad_held_map = map;
+        pad_held_n = n;
+    }
+    uint16_t now = 0;
+    for (int i = 0; i < n; i++) {
+        const bool down = (buttons & map[i].bit) != 0;
+        const bool was = (pad_held & map[i].bit) != 0;
+        if (down != was) synth_key(down, map[i].key);
+        if (down) now |= map[i].bit;
+    }
+    pad_held = now;
+}
+
+// stick value with the dead zone taken out, as FRACUNIT (65536) at full
+static int pad_axis(int v) {
+    const int dz = gamepad_dead_zone * 127 / 100;
+    if (v > -dz - 1 && v < dz + 1) return 0;
+    const int span = 127 - dz;
+    const int a = v > 0 ? v - dz : v + dz;
+    return span > 0 ? a * 65536 / span : 0;
+}
+
+// The pads together: USB (sticks and buttons) and the NES/SNES port. On
+// the port, NES A / SNES B fires, NES B / SNES Y uses, SNES A runs, SNES X
+// is the automap, L and R change weapons (the USB pad's RT, A, LT, Y, LB,
+// RB), Select opens the settings.
+static bool get_pad(usbhid_gamepad_state_t *p) {
+    bool any = false;
+    memset(p, 0, sizeof(*p));
+    if (usbhid_wrapper_gamepad_connected()) {
+        usbhid_wrapper_get_gamepad(p);
+        any = true;
+    }
+#ifdef NESPAD_GPIO_CLK
+    nespad_read();
+    const uint32_t n = nespad_state;
+    static const struct { uint32_t nes; uint16_t gp; } map[] = {
+        {DPAD_UP, GP_UP}, {DPAD_DOWN, GP_DOWN}, {DPAD_LEFT, GP_LEFT}, {DPAD_RIGHT, GP_RIGHT},
+        {DPAD_START, GP_START}, {DPAD_SELECT, GP_BACK}, {DPAD_A, GP_RT}, {DPAD_B, GP_A},
+        {DPAD_Y, GP_LT}, {DPAD_X, GP_Y}, {DPAD_LT, GP_LB}, {DPAD_RT, GP_RB},
+    };
+    for (unsigned i = 0; i < sizeof(map) / sizeof(map[0]); i++)
+        if (n & map[i].nes) p->buttons |= map[i].gp;
+    any = true;  // unplugged, the port reads no buttons
+#endif
+    return any;
+}
+
+static usbhid_gamepad_state_t pad_last;
+static bool pad_joy_sent;
+
+static void pad_post_joystick(int buttons, int turn, int forward, int strafe, int look) {
+    event_t ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.type = ev_joystick;
+    ev.data1 = buttons;
+    ev.data2 = turn;
+    ev.data3 = forward;
+    ev.data4 = strafe;
+    ev.data5 = look;
+    D_PostEvent(&ev);
+}
+
+// in the game: the sticks and buttons as the engine's joystick; the D-pad,
+// Start and Back as keys
+static void pad_game_tick(void) {
+    usbhid_gamepad_state_t p;
+    if (!get_pad(&p)) {
+        if (pad_joy_sent) pad_post_joystick(0, 0, 0, 0, 0);
+        pad_joy_sent = false;
+        pad_keys(0, pad_held_map ? pad_held_map : pad_game_keys, pad_held_map ? pad_held_n : 0);
+        return;
+    }
+    const fs_glue_t *g = fs_glue_active();
+    const bool menu = g && g->menu_active && *g->menu_active;
+
+    if (menu) {
+        pad_keys(p.buttons, pad_menu_keys, (int)(sizeof(pad_menu_keys) / sizeof(pad_menu_keys[0])));
+        if (pad_joy_sent) pad_post_joystick(0, 0, 0, 0, 0);
+        pad_joy_sent = false;
+        pad_last = p;
+        return;
+    }
+    pad_keys(p.buttons, pad_game_keys, (int)(sizeof(pad_game_keys) / sizeof(pad_game_keys[0])));
+
+    if (pad_joy_sent && !memcmp(&p, &pad_last, sizeof(p))) return;
+    pad_last = p;
+    static const struct { uint16_t bit; uint8_t jb; } jbuttons[] = {
+        {GP_A, JB_A}, {GP_B, JB_B}, {GP_X, JB_X}, {GP_Y, JB_Y}, {GP_LB, JB_LB}, {GP_RB, JB_RB},
+        {GP_LT, JB_LT}, {GP_RT, JB_RT}, {GP_L3, JB_L3}, {GP_R3, JB_R3},
+    };
+    int jb = 0;
+    for (unsigned i = 0; i < sizeof(jbuttons) / sizeof(jbuttons[0]); i++)
+        if (p.buttons & jbuttons[i].bit) jb |= 1 << jbuttons[i].jb;
+    const int lx = pad_axis(p.lx), ly = pad_axis(p.ly), rx = pad_axis(p.rx), ry = pad_axis(p.ry);
+    const int look = gamepad_invert_look ? -ry : ry;
+    if (gamepad_swap_sticks) pad_post_joystick(jb, lx, ly, rx, look);
+    else pad_post_joystick(jb, rx, ly, lx, look);
+    pad_joy_sent = true;
+}
+
+// in the firmware UI: the pad as navigation keys (the left stick too)
+static void pad_ui_tick(void) {
+    uint16_t b = 0;
+    usbhid_gamepad_state_t p;
+    if (get_pad(&p)) {
+        b = p.buttons;
+        if (p.ly < -64) b |= GP_UP;
+        if (p.ly > 64) b |= GP_DOWN;
+        if (p.lx < -64) b |= GP_LEFT;
+        if (p.lx > 64) b |= GP_RIGHT;
+    }
+    pad_keys(b, pad_ui_keys, (int)(sizeof(pad_ui_keys) / sizeof(pad_ui_keys[0])));
+}
+
+//--------------------------------------------------------------------
+// Keyboard
+//--------------------------------------------------------------------
+
+// Keys the engine has seen pressed, released for it when the settings close
+static uint32_t keys_down[8];
+
+#if defined(FRANK_UART_CONSOLE) || defined(FRANK_USB_CONSOLE)
+// Bench console on UART0 or the native USB: a character is a key (pressed and released),
+// Enter, Backspace, Tab, Esc, ANSI arrows / Home / End / PgUp / PgDn /
+// Ins / Del / F1..F12. "~BOOT~" reboots into BOOTSEL, "~RST~" restarts.
+static void console_tap(int key) {
+    synth_key(1, key);
+    synth_key(0, key);
+}
+
+static void console_poll(void) {
+    static int esc;          // 0 none, 1 ESC seen, 2 in "ESC ["
+    static int num;
+    static uint32_t esc_at;
+    static char tail[8];
+    int ch;
+    while ((ch = getchar_timeout_us(0)) >= 0) {
+        memmove(tail, tail + 1, sizeof(tail) - 2);
+        tail[sizeof(tail) - 2] = (char)ch;
+        if (!strcmp(tail + 1, "~BOOT~")) { printf("\nrebooting to BOOTSEL\n"); sleep_ms(20); platform_reboot(true); }
+        if (!strcmp(tail + 2, "~RST~")) { printf("\nrebooting\n"); sleep_ms(20); platform_reboot(false); }
+        if (esc == 1) {
+            if (ch == '[' || ch == 'O') { esc = 2; num = 0; continue; }
+            console_tap(KEY_ESCAPE);
+            esc = 0;
+        }
+        if (esc == 2) {
+            if (ch >= '0' && ch <= '9') { num = num * 10 + (ch - '0'); continue; }
+            esc = 0;
+            static const struct { int n; int key; } tilde[] = {
+                {1, KEY_HOME}, {2, KEY_INS}, {3, KEY_DEL}, {4, KEY_END}, {5, KEY_PGUP}, {6, KEY_PGDN},
+                {11, KEY_F1}, {12, KEY_F2}, {13, KEY_F3}, {14, KEY_F4}, {15, KEY_F5}, {17, KEY_F6},
+                {18, KEY_F7}, {19, KEY_F8}, {20, KEY_F9}, {21, KEY_F10}, {23, KEY_F11}, {24, KEY_F12},
+            };
+            switch (ch) {
+            case 'A': console_tap(KEY_UPARROW); break;
+            case 'B': console_tap(KEY_DOWNARROW); break;
+            case 'C': console_tap(KEY_RIGHTARROW); break;
+            case 'D': console_tap(KEY_LEFTARROW); break;
+            case 'H': console_tap(KEY_HOME); break;
+            case 'F': console_tap(KEY_END); break;
+            case 'P': console_tap(KEY_F1); break;
+            case '~':
+                for (unsigned i = 0; i < sizeof(tilde) / sizeof(tilde[0]); i++)
+                    if (tilde[i].n == num) console_tap(tilde[i].key);
+                break;
+            }
+            continue;
+        }
+        if (ch == 0x1b) { esc = 1; esc_at = time_us_32(); continue; }
+        if (ch == '\r' || ch == '\n') console_tap(KEY_ENTER);
+        else if (ch == 0x7f || ch == 8) console_tap(KEY_BACKSPACE);
+        else if (ch == '\t') console_tap(KEY_TAB);
+        else if (ch >= 'A' && ch <= 'Z') console_tap(ch - 'A' + 'a');
+        else if (ch >= 32 && ch < 127) console_tap(ch);
+    }
+    if (esc == 1 && time_us_32() - esc_at > 30000) {  // a lone ESC
+        console_tap(KEY_ESCAPE);
+        esc = 0;
+    }
+}
+#endif
+
+// Bench hook: a debugger writes 0x100 | key (press) or 0x200 | key
+// (release) here over SWD, the firmware takes it as a keyboard event;
+// 0xB007 reboots into BOOTSEL, 0x0857 restarts (for builds without a console).
+volatile uint32_t dg_swd_key;
+
+static int raw_key(int *pressed, unsigned char *key) {
+    const uint32_t swd = dg_swd_key;
+    if (swd == 0xB007 || swd == 0x0857) {
+        dg_swd_key = 0;
+        platform_reboot(swd == 0xB007);
+    }
+    if (swd) {
+        dg_swd_key = 0;
+        *pressed = (swd & 0x100) != 0;
+        *key = (unsigned char)swd;
+        return 1;
+    }
+#if defined(FRANK_UART_CONSOLE) || defined(FRANK_USB_CONSOLE)
+    console_poll();
+#endif
     ps2kbd_tick();
-    ps2mouse_wrapper_tick();  // Process PS/2 mouse events
-    // Note: usbhid_wrapper_tick() is called from I_StartTic() during gameplay
+    usb_poll();
+    if (ps2kbd_get_key(pressed, key)) return 1;
+    if (usbhid_wrapper_get_key(pressed, key)) return 1;
+    return synth_pop(pressed, key);
+}
 
-    // Check PS/2 keyboard first
-    if (ps2kbd_get_key(pressed, key)) {
+#if (defined(FRANK_UART_CONSOLE) || defined(FRANK_NO_PS2_MOUSE)) && (defined(BOARD_M2) || defined(BOARD_Z0))
+#define PS2_MOUSE_OFF 1  // its pins belong to the bench (console / probe UART)
+#endif
+
+int DG_GetKey(int* pressed, unsigned char* key) {
+#ifndef PS2_MOUSE_OFF
+    ps2mouse_wrapper_tick();
+#endif
+    usb_mouse_tick();
+    pad_game_tick();
+
+    while (raw_key(pressed, key)) {
+        if (in_game && *key == KEY_F12) {
+            if (*pressed) settings_requested = true;
+            continue;
+        }
+        if (*pressed) keys_down[*key >> 5] |= 1u << (*key & 31);
+        else keys_down[*key >> 5] &= ~(1u << (*key & 31));
         return 1;
     }
-
-    // Then check USB HID keyboard directly (for pre-game screens like WAD selection)
-    if (usbhid_wrapper_get_key(pressed, key)) {
-        return 1;
-    }
-
     return 0;
+}
+
+// Keys for the firmware UI: no events to the engine, mouse input dropped
+int DG_UIKey(int *pressed, unsigned char *key) {
+    int16_t dx, dy;
+    int8_t wheel;
+    uint8_t buttons;
+#ifndef PS2_MOUSE_OFF
+    ps2mouse_get_state(&dx, &dy, &wheel, &buttons);
+#else
+    (void)dx; (void)dy; (void)wheel;
+#endif
+    int udx, udy, uwheel;
+    usbhid_wrapper_get_mouse(&udx, &udy, &uwheel, &buttons);
+    pad_ui_tick();
+    fui_cfg_feed();
+    return raw_key(pressed, key);
+}
+
+// I_StartTic, after the engine's events: the F12 settings window
+void DG_CheckSettings(void) {
+    if (!settings_requested) return;
+    settings_requested = false;
+    const uint32_t t0 = to_ms_since_boot(get_absolute_time());
+    pad_post_joystick(0, 0, 0, 0, 0);  // nothing held while the game waits
+    pad_joy_sent = false;
+    fui_settings_run();
+    paused_ms += to_ms_since_boot(get_absolute_time()) - t0;
+    // the engine gets its key-ups and an idle mouse; the pad's keys are
+    // released by the context change
+    synth_rd = synth_wr;
+    for (int k = 0; k < 256; k++)
+        if (keys_down[k >> 5] & (1u << (k & 31))) {
+            keys_down[k >> 5] &= ~(1u << (k & 31));
+            synth_key(0, k);
+        }
+    DG_PostMouse(0, 0, 0, 0);
+    usb_prev_buttons = 0;
 }
 
 void DG_SetWindowTitle(const char * title) {
@@ -921,22 +705,40 @@ void DG_SetWindowTitle(const char * title) {
 
 #define CRASH_MAGIC 0xDEAD0FAD
 
-static void hard_fault_handler(void) {
-    uint32_t *stack;
-    __asm volatile("mrs %0, msp" : "=r"(stack));
-    volatile uint32_t *cfsr = (volatile uint32_t *)0xE000ED28;
+/* frame: the stacked R0..R3, R12, LR, PC, xPSR of the faulting code */
+/* the whole picture of the last fault, kept across the reboot for SWD:
+ * magic, R0..R3, R12, LR, PC, xPSR, R4..R11, CFSR, BFAR, MMFAR */
+uint32_t __uninitialized_ram(crash_dump)[22];
 
+static void __attribute__((used)) hard_fault_report(const uint32_t *frame, const uint32_t *r4_r11) {
+    crash_dump[0] = CRASH_MAGIC;
+    for (int i = 0; i < 8; i++) crash_dump[1 + i] = frame[i];
+    for (int i = 0; i < 8; i++) crash_dump[9 + i] = r4_r11[i];
+    crash_dump[17] = *(volatile uint32_t *)0xE000ED28;
+    crash_dump[18] = *(volatile uint32_t *)0xE000ED38;
+    crash_dump[19] = *(volatile uint32_t *)0xE000ED34;
     // Save crash info to watchdog scratch registers (survive reboot)
     watchdog_hw->scratch[0] = CRASH_MAGIC;
-    watchdog_hw->scratch[1] = stack[6];  // PC
-    watchdog_hw->scratch[2] = stack[5];  // LR
-    watchdog_hw->scratch[3] = *cfsr;     // CFSR
-    watchdog_hw->scratch[4] = stack[0];  // R0
-    watchdog_hw->scratch[5] = stack[1];  // R1
+    watchdog_hw->scratch[1] = frame[6];                         // PC
+    watchdog_hw->scratch[2] = frame[5];                         // LR
+    watchdog_hw->scratch[3] = *(volatile uint32_t *)0xE000ED28; // CFSR
+    watchdog_hw->scratch[4] = *(volatile uint32_t *)0xE000ED38; // BFAR
+    watchdog_hw->scratch[5] = frame[0];                         // R0
 
-    // Force immediate reboot
-    watchdog_reboot(0, 0, 0);
-    while(1);
+    // Reboot, core 1 stopped and the PSRAM in SPI mode for the boot ROM
+    platform_reboot(false);
+}
+
+/* the frame is on MSP or PSP, as EXC_RETURN bit 2 says, before any push */
+static void __attribute__((naked)) hard_fault_handler(void) {
+    __asm volatile(
+        "tst lr, #4\n"
+        "ite eq\n"
+        "mrseq r0, msp\n"
+        "mrsne r0, psp\n"
+        "push {r4-r11}\n"
+        "mov r1, sp\n"
+        "b hard_fault_report\n");
 }
 
 void install_fault_handler(void) {
@@ -950,7 +752,7 @@ void check_crash_report(void) {
         printf("PC=0x%08lx  LR=0x%08lx\n",
                (unsigned long)watchdog_hw->scratch[1],
                (unsigned long)watchdog_hw->scratch[2]);
-        printf("CFSR=0x%08lx  R0=0x%08lx  R1=0x%08lx\n",
+        printf("CFSR=0x%08lx  BFAR=0x%08lx  R0=0x%08lx\n",
                (unsigned long)watchdog_hw->scratch[3],
                (unsigned long)watchdog_hw->scratch[4],
                (unsigned long)watchdog_hw->scratch[5]);
@@ -992,9 +794,7 @@ void I_Quit(void) {
         exit_funcs[i]();
     }
     printf("I_Quit: rebooting to WAD selector...\n");
-    // Clean reboot back to the start screen
-    watchdog_reboot(0, 0, 10);  // Reboot in 10ms
-    while(1) tight_loop_contents();
+    platform_reboot(false);  // back to the start screen
 }
 
 byte *I_ZoneBase(int *size) {

@@ -2,6 +2,7 @@
 #ifndef HEXEN_PREFIX_H
 #define HEXEN_PREFIX_H
 #define  HEXEN_
+#define fs_glue HEXEN_fs_glue
 #define  HEXEN_
 #define ACSInfo HEXEN_ACSInfo
 #define ACSStore HEXEN_ACSStore

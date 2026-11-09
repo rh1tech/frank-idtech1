@@ -42,6 +42,9 @@ uint32_t DG_GetTicksMs();
 int DG_GetKey(int* pressed, unsigned char* key);
 void DG_SetWindowTitle(const char * title);
 void DG_StartScreen(void);
+void DG_WaitBackBuffer(void);   // before drawing into DG_ScreenBuffer
+void DG_Overlay(void);          // the frame is in DG_ScreenBuffer: the FPS counter
+void DG_CheckSettings(void);    // I_StartTic: run the F12 settings window if asked
 
 #ifdef __cplusplus
 }

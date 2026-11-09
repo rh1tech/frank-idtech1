@@ -194,23 +194,23 @@ int key_menu_screenshot = 0;
 // Joystick controls
 //
 
-int joybfire = 0;
-int joybstrafe = 1;
-int joybuse = 3;
-int joybspeed = 2;
+int joybfire = 7;
+int joybstrafe = -1;
+int joybuse = 0;
+int joybspeed = 6;
 
 int joybstrafeleft = -1;
 int joybstraferight = -1;
 
-int joybjump = -1;
+int joybjump = 1;
 
-int joybprevweapon = -1;
-int joybnextweapon = -1;
+int joybprevweapon = 4;
+int joybnextweapon = 5;
 
 int joybmenu = -1;
-int joybautomap = -1;
+int joybautomap = 3;
 
-int joybuseartifact = -1;
+int joybuseartifact = 2;
 int joybinvleft = -1;
 int joybinvright = -1;
 
@@ -227,8 +227,49 @@ int dclick_use = 1;
 // Bind all of the common controls used by Doom and all other games.
 //
 
+// frank-idtech1 settings (the F12 window), saved with every game's config
+#include "fui.h"
+extern int mouse_invert_y, mouse_invert_x, mouse_novert, mouse_scale;  // src/doomgeneric_rp2350.c
+extern int gamepad_dead_zone, gamepad_invert_look, gamepad_swap_sticks, show_fps;
+extern int master_volume, audio_stereo;   // src/pico/i_picosound.c
+extern int usegamma, mouse_threshold;     // src/common/i_video.c
+extern float mouse_acceleration;
+
+static void M_BindFrankControls(void)
+{
+    M_BindIntVariable("mouse_invert_y",     &mouse_invert_y);
+    M_BindIntVariable("mouse_invert_x",     &mouse_invert_x);
+    M_BindIntVariable("novert",             &mouse_novert);
+    M_BindIntVariable("mouse_scale",        &mouse_scale);
+    M_BindFloatVariable("mouse_acceleration", &mouse_acceleration);
+    M_BindIntVariable("mouse_threshold",    &mouse_threshold);
+    M_BindIntVariable("master_volume",      &master_volume);
+    M_BindIntVariable("audio_stereo",       &audio_stereo);
+    M_BindIntVariable("usegamma",           &usegamma);
+    M_BindIntVariable("show_fps",           &show_fps);
+    M_BindIntVariable("gamepad_dead_zone",  &gamepad_dead_zone);
+    M_BindIntVariable("gamepad_invert_look", &gamepad_invert_look);
+    M_BindIntVariable("gamepad_swap_sticks", &gamepad_swap_sticks);
+
+    // The game's own gamepad settings (prefixed per game): analog sticks on
+    // by default, the config file has the last word
+    const fs_glue_t *g = fs_glue_active();
+    if (g) {
+        *g->use_analog = 1;
+        *g->joy_move = *g->joy_turn = 10;
+        M_BindIntVariable("use_analog", g->use_analog);
+        M_BindIntVariable("joystick_move_sensitivity", g->joy_move);
+        M_BindIntVariable("joystick_turn_sensitivity", g->joy_turn);
+        if (g->joy_look) {
+            *g->joy_look = 10;
+            M_BindIntVariable("joystick_look_sensitivity", g->joy_look);
+        }
+    }
+}
+
 void M_BindBaseControls(void)
 {
+    M_BindFrankControls();
     M_BindIntVariable("key_right",          &key_right);
     M_BindIntVariable("key_left",           &key_left);
     M_BindIntVariable("key_up",             &key_up);

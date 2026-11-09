@@ -1154,6 +1154,35 @@ static default_t extra_defaults_list[] =
     CONFIG_VARIABLE_INT(novert),
 
     //!
+    // frank-idtech1: if non-zero, vertical mouse movement is inverted
+    // (PS/2 and USB mice; the F12 settings window).
+    //
+
+    CONFIG_VARIABLE_INT(mouse_invert_y),
+
+    //!
+    // frank-idtech1: output volume of the board, 0 (silent) to 16 (full).
+    //
+
+    CONFIG_VARIABLE_INT(master_volume),
+
+    //!
+    // frank-idtech1: more settings of the F12 window. Mouse: turning
+    // inverted, counts per game unit (1..8). Gamepad: stick dead zone in
+    // percent, the right stick's look inverted, the sticks swapped (left
+    // turns, right strafes). Audio: 0 stereo, 1 swapped, 2 mono. The frame
+    // rate in the top right.
+    //
+
+    CONFIG_VARIABLE_INT(mouse_invert_x),
+    CONFIG_VARIABLE_INT(mouse_scale),
+    CONFIG_VARIABLE_INT(gamepad_dead_zone),
+    CONFIG_VARIABLE_INT(gamepad_invert_look),
+    CONFIG_VARIABLE_INT(gamepad_swap_sticks),
+    CONFIG_VARIABLE_INT(audio_stereo),
+    CONFIG_VARIABLE_INT(show_fps),
+
+    //!
     // Mouse acceleration factor.  When the speed of mouse movement
     // exceeds the threshold value (mouse_threshold), the speed is
     // multiplied by this value.

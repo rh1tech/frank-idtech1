@@ -602,6 +602,13 @@ void P_PlayerThink(player_t * player)
     int floorType;
     mobj_t *pmo;
 
+    // A player in the game without a body (a demo naming more players than
+    // the map has starts for) has nothing to think about.
+    if (player->mo == NULL)
+    {
+        return;
+    }
+
     // No-clip cheat
     if (player->cheats & CF_NOCLIP)
     {

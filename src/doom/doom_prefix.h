@@ -2,6 +2,7 @@
 #ifndef DOOM_PREFIX_H
 #define DOOM_PREFIX_H
 #define  DOOM_
+#define fs_glue DOOM_fs_glue
 #define AM_Drawer DOOM_AM_Drawer
 #define AM_LevelInit DOOM_AM_LevelInit
 #define AM_Responder DOOM_AM_Responder

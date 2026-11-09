@@ -34,6 +34,29 @@ typedef struct {
     int has_motion;         // Non-zero if motion/button change occurred
 } usbhid_mouse_state_t;
 
+// Gamepad state (gamepad.c): buttons, and sticks -127..127 (up/left negative)
+enum {
+    GP_A = 1u << 0, GP_B = 1u << 1, GP_X = 1u << 2, GP_Y = 1u << 3,
+    GP_LB = 1u << 4, GP_RB = 1u << 5, GP_LT = 1u << 6, GP_RT = 1u << 7,
+    GP_L3 = 1u << 8, GP_R3 = 1u << 9, GP_BACK = 1u << 10, GP_START = 1u << 11,
+    GP_UP = 1u << 12, GP_DOWN = 1u << 13, GP_LEFT = 1u << 14, GP_RIGHT = 1u << 15,
+};
+
+typedef struct {
+    uint16_t buttons;
+    int8_t lx, ly, rx, ry;
+} usbhid_gamepad_state_t;
+
+int usbhid_gamepad_connected(void);
+void usbhid_get_gamepad_state(usbhid_gamepad_state_t *state);
+
+// hid_app.c -> gamepad.c
+#include <stdbool.h>
+bool gamepad_hid_mount(uint8_t instance, uint16_t vid, uint16_t pid);
+void gamepad_hid_umount(uint8_t instance);
+bool gamepad_hid_report(uint8_t instance, uint8_t const *report, uint16_t len);
+void gamepad_hid_generic(uint8_t instance, uint8_t const *report, uint16_t len);
+
 //--------------------------------------------------------------------
 // API Functions
 //--------------------------------------------------------------------

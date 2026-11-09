@@ -264,6 +264,7 @@ SECTIONS
     /* Start and end symbols must be word-aligned */
     .scratch_x : {
         __scratch_x_start__ = .;
+        *(.scratch_x.hdmi_pal) /* PIO HDMI: 4 KB aligned, the bank's start */
         *(.scratch_x.*)
         . = ALIGN(4);
         __scratch_x_end__ = .;
@@ -272,6 +273,7 @@ SECTIONS
 
     .scratch_y : {
         __scratch_y_start__ = .;
+        *(.scratch_y.hdmi_tab) /* PIO HDMI: 4 KB aligned, the bank's start */
         *(.scratch_y.*)
         . = ALIGN(4);
         __scratch_y_end__ = .;

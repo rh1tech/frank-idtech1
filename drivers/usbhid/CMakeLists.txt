@@ -14,6 +14,10 @@ if(USB_HID_ENABLED)
     target_sources(usbhid INTERFACE
         ${CMAKE_CURRENT_LIST_DIR}/hid_app.c
         ${CMAKE_CURRENT_LIST_DIR}/usbhid_wrapper.c
+        ${CMAKE_CURRENT_LIST_DIR}/gamepad.c
+        ${CMAKE_CURRENT_LIST_DIR}/xinput_host.c
+        ${CMAKE_CURRENT_LIST_DIR}/hid_rip.c
+        ${CMAKE_CURRENT_LIST_DIR}/hid_ri.c
     )
     
     # Include this directory for tusb_config_usbhid.h (renamed to avoid conflict)
@@ -25,6 +29,18 @@ if(USB_HID_ENABLED)
         USB_HID_ENABLED=1
     )
     
+    if(PIO_USB_ENABLED)
+        message(STATUS "  USB host on PIO-USB (root port 1)")
+        # One root port and 24 endpoints (murm386): a hub, a composite
+        # keyboard, a mouse and a pad, each with its control endpoint.
+        target_compile_definitions(usbhid INTERFACE
+            CFG_TUH_RPI_PIO_USB=1
+            PIO_USB_ROOT_PORT_CNT=1
+            PIO_USB_EP_POOL_CNT=24
+        )
+        target_link_libraries(usbhid INTERFACE tinyusb_pico_pio_usb)
+    endif()
+
     # Link TinyUSB Host
     target_link_libraries(usbhid INTERFACE
         tinyusb_host

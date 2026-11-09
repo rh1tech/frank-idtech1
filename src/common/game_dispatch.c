@@ -106,3 +106,21 @@ int net_client_received_wait_data = 0;
 int drone = 0;
 void *net_client_wait_data = 0;
 char *net_client_reject_reason = 0;
+
+// Per-game settings for the F12 window (src/<game>/fs_glue.c)
+#include "fui.h"
+
+extern const fs_glue_t DOOM_fs_glue;
+extern const fs_glue_t HERETIC_fs_glue;
+extern const fs_glue_t HEXEN_fs_glue;
+extern const fs_glue_t STRIFE_fs_glue;
+
+const fs_glue_t *fs_glue_active(void)
+{
+    switch (active_game) {
+    case 0: return &DOOM_fs_glue;
+    case 2: return &HEXEN_fs_glue;
+    case 3: return &STRIFE_fs_glue;
+    default: return &HERETIC_fs_glue;
+    }
+}
