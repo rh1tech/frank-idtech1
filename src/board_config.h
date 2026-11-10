@@ -9,6 +9,8 @@
  * 
  * BOARD_M1 - M1 GPIO layout
  * BOARD_M2 - M2 GPIO layout
+ * BOARD_Z0 - Waveshare RP2350-PiZero
+ * BOARD_TW - UKTailwind Pico Computer 3
  * 
  * PSRAM pin is auto-detected based on chip package:
  *   RP2350B: GPIO47 (for both M1 and M2)
@@ -34,6 +36,16 @@
  *   NES:  CLK=4, DATA=6, LATCH=7
  *   PSRAM CS: GPIO47
  *
+ * TW (UKTailwind Pico Computer 3, an RP2350B):
+ *   HDMI: as M2 (CLKN=12 .. D2P=19, pio1)
+ *   SD:   SPI1, CLK=30, MOSI=31, MISO=28, CS=33
+ *   I2S:  on-board PCM5102A, BCK=10, LRCK=11, DIN=22
+ *   USB:  native USB through the on-board CH334U hub (4 USB-A ports)
+ *   Console: UART1 TX=8, RX=9 (the on-board CH340C)
+ *   No PS/2 or pad port: PS/2 keyboard CLK=2, DATA=3, mouse CLK=0, DATA=1
+ *   and the NES pad CLK=4, DATA=6, LATCH=7 on the EXTERNAL I/O header
+ *   PSRAM CS: GPIO47
+ *
  * CPU/PSRAM Speed (set via CMake -DCPU_SPEED=xxx -DPSRAM_SPEED=xxx):
  *   252 MHz - no overclock (default for stable operation)
  *   378 MHz - medium overclock
@@ -41,7 +53,7 @@
  */
 
 // Default to M1 if no config specified
-#if !defined(BOARD_M1) && !defined(BOARD_M2) && !defined(BOARD_Z0)
+#if !defined(BOARD_M1) && !defined(BOARD_M2) && !defined(BOARD_Z0) && !defined(BOARD_TW)
 #define BOARD_M1
 #endif
 
@@ -67,7 +79,7 @@
 // PSRAM pin for RP2350A variants
 #ifdef BOARD_M1
 #define PSRAM_PIN_RP2350A 19
-#elif defined(BOARD_Z0)
+#elif defined(BOARD_Z0) || defined(BOARD_TW)
 #define PSRAM_PIN_RP2350A 47
 #else
 #define PSRAM_PIN_RP2350A 8
@@ -193,5 +205,42 @@ static inline uint get_psram_pin(void) {
 #define I2S_CLOCK_PIN_BASE 11
 
 #endif // BOARD_Z0
+
+//=============================================================================
+// TW Layout Configuration: UKTailwind Pico Computer 3
+//=============================================================================
+#ifdef BOARD_TW
+
+// HDMI Pins (as M2)
+#define HDMI_PIN_CLKN 12
+#define HDMI_PIN_CLKP 13
+#define HDMI_PIN_D0N  14
+#define HDMI_PIN_D0P  15
+#define HDMI_PIN_D1N  16
+#define HDMI_PIN_D1P  17
+#define HDMI_PIN_D2N  18
+#define HDMI_PIN_D2P  19
+
+#define HDMI_BASE_PIN HDMI_PIN_CLKN
+
+// SD Card Pins (SPI1)
+#define SDCARD_PIN_CLK    30
+#define SDCARD_PIN_CMD    31
+#define SDCARD_PIN_D0     28
+#define SDCARD_PIN_D3     33
+
+// PS/2 Keyboard Pins (EXTERNAL I/O header)
+#define PS2_PIN_CLK  2
+#define PS2_PIN_DATA 3
+
+// PS/2 Mouse Pins (EXTERNAL I/O header)
+#define PS2_MOUSE_CLK  0
+#define PS2_MOUSE_DATA 1
+
+// I2S Audio Pins (the on-board PCM5102A: BCK 10, LRCK 11, DIN 22)
+#define I2S_DATA_PIN       22
+#define I2S_CLOCK_PIN_BASE 10
+
+#endif // BOARD_TW
 
 #endif // BOARD_CONFIG_H

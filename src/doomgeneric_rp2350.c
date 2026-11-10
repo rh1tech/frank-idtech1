@@ -140,10 +140,12 @@ void DG_Init() {
     // Initialize stdio wrapper for FatFS
     stdio_fatfs_init();
 
-#if (defined(FRANK_UART_CONSOLE) || defined(FRANK_NO_PS2_MOUSE)) && (defined(BOARD_M2) || defined(BOARD_Z0))
+#if (defined(FRANK_UART_CONSOLE) && (defined(BOARD_M2) || defined(BOARD_Z0))) || \
+    (defined(FRANK_NO_PS2_MOUSE) && !defined(BOARD_M1))
     ps2kbd_init();             // M2: the mouse's GPIO0/1 belong to the bench
-#elif defined(FRANK_UART_CONSOLE)
+#elif defined(FRANK_UART_CONSOLE) && defined(BOARD_M1)
     ps2mouse_wrapper_init();   // M1: the console has the keyboard's GPIO0/1
+                               // (TW's is UART1 on GPIO8/9: both PS/2 ports stay)
 #else
     // Initialize PS/2 Keyboard
     ps2kbd_init();
@@ -545,7 +547,7 @@ static void pad_ui_tick(void) {
 static uint32_t keys_down[8];
 
 #if defined(FRANK_UART_CONSOLE) || defined(FRANK_USB_CONSOLE)
-// Bench console on UART0 or the native USB: a character is a key (pressed and released),
+// Bench console on UART0 (TW: UART1) or the native USB: a character is a key (pressed and released),
 // Enter, Backspace, Tab, Esc, ANSI arrows / Home / End / PgUp / PgDn /
 // Ins / Del / F1..F12. "~BOOT~" reboots into BOOTSEL, "~RST~" restarts.
 static void console_tap(int key) {
@@ -633,7 +635,8 @@ static int raw_key(int *pressed, unsigned char *key) {
     return synth_pop(pressed, key);
 }
 
-#if (defined(FRANK_UART_CONSOLE) || defined(FRANK_NO_PS2_MOUSE)) && (defined(BOARD_M2) || defined(BOARD_Z0))
+#if (defined(FRANK_UART_CONSOLE) && (defined(BOARD_M2) || defined(BOARD_Z0))) || \
+    (defined(FRANK_NO_PS2_MOUSE) && !defined(BOARD_M1))
 #define PS2_MOUSE_OFF 1  // its pins belong to the bench (console / probe UART)
 #endif
 

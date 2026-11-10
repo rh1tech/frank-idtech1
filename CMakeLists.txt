@@ -11,8 +11,11 @@ endif()
 string(TOUPPER ${GAME} GAME_UPPER)
 message(STATUS "Game: ${GAME}")
 
-# Board configuration variant (M1, M2, Z0)
-set(BOARD_VARIANT "M1" CACHE STRING "Board variant: M1, M2 or Z0")
+# Board configuration variant (M1, M2, Z0, TW)
+set(BOARD_VARIANT "M1" CACHE STRING "Board variant: M1, M2, Z0 or TW")
+if(NOT BOARD_VARIANT MATCHES "^(M1|M2|Z0|TW)$")
+    message(FATAL_ERROR "Invalid BOARD_VARIANT: ${BOARD_VARIANT}. Must be M1, M2, Z0 or TW")
+endif()
 
 if(BOARD_VARIANT STREQUAL "Z0")
     # Waveshare RP2350-PiZero: an RP2350B. The stock pico2 definition caps
@@ -20,6 +23,11 @@ if(BOARD_VARIANT STREQUAL "Z0")
     # need the B package and PIO's movable GPIO window.
     set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/boards CACHE PATH "" FORCE)
     set(PICO_BOARD "frank_z0_rp2350b" CACHE STRING "Pico board type" FORCE)
+elseif(BOARD_VARIANT STREQUAL "TW")
+    # UKTailwind Pico Computer 3: an RP2350B, SD card on 28/30/31/33 and
+    # PSRAM CS on GPIO47, beyond the pico2 definition's GPIO 0..29.
+    set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/boards CACHE PATH "" FORCE)
+    set(PICO_BOARD "frank_tw_rp2350b" CACHE STRING "Pico board type" FORCE)
 else()
     # Set board to Pico 2 (RP2350)
     set(PICO_BOARD pico2 CACHE STRING "Pico board type")
@@ -124,10 +132,10 @@ target_compile_definitions(drivers PRIVATE
 )
 # HDMI: frank-quake2's PIO driver (drivers/hdmi_pio). Z0 drives GPIO32..39
 # from pio0 (its GPIO window at 16); M1/M2 use pio1, their pio0 holds the
-# PS/2 keyboard and I2S.
+# PS/2 keyboard and I2S. TW's HDMI is wired as the M2's (GPIO12..19).
 if(BOARD_VARIANT STREQUAL "Z0")
     target_compile_definitions(drivers PRIVATE HDMI_PIO_BASE_PIN=32 HDMI_PIO_Z0_LAYOUT=1 PIO_VIDEO=pio0)
-elseif(BOARD_VARIANT STREQUAL "M2")
+elseif(BOARD_VARIANT STREQUAL "M2" OR BOARD_VARIANT STREQUAL "TW")
     target_compile_definitions(drivers PRIVATE HDMI_PIO_BASE_PIN=12 HDMI_PIO_Z0_LAYOUT=0 PIO_VIDEO=pio1)
 else()
     target_compile_definitions(drivers PRIVATE HDMI_PIO_BASE_PIN=6 HDMI_PIO_Z0_LAYOUT=0 PIO_VIDEO=pio1)
@@ -350,6 +358,24 @@ elseif(BOARD_VARIANT STREQUAL "Z0")
         # the "PIO-USB" socket: D+ GPIO28, D- GPIO29, a whole PIO (pio1)
         target_compile_definitions(frank-idtech1 PRIVATE PIO_USB_DP_PIN=28 PIO_USB_PIO=1)
     endif()
+elseif(BOARD_VARIANT STREQUAL "TW")
+    # UKTailwind Pico Computer 3 (https://github.com/UKTailwind/Pico-Computer-3)
+    target_compile_definitions(frank-idtech1 PRIVATE
+        # I2S Audio: the on-board PCM5102A (BCK 10, LRCK 11, DIN 22)
+        PICO_AUDIO_I2S_DATA_PIN=22
+        PICO_AUDIO_I2S_CLOCK_PIN_BASE=10
+        # SD Card on SPI1
+        SDCARD_SPI_BUS=spi1
+        SDCARD_PIN_SPI0_CS=33
+        SDCARD_PIN_SPI0_SCK=30
+        SDCARD_PIN_SPI0_MOSI=31
+        SDCARD_PIN_SPI0_MISO=28
+        # No PS/2 or pad port on the board: PS/2 (as M2, GPIO0..3) and the
+        # NES/SNES pad (as Z0, GPIO4/6/7) on the "EXTERNAL I/O" header
+        NESPAD_GPIO_CLK=4
+        NESPAD_GPIO_LATCH=7
+        NESPAD_GPIO_DATA=6
+    )
 elseif(BOARD_VARIANT STREQUAL "M2")
     target_compile_definitions(frank-idtech1 PRIVATE
         # I2S Audio
@@ -408,6 +434,8 @@ target_link_options(frank-idtech1 PRIVATE
 # take UART0 (GPIO0/1, 115200) for a console instead: logs, keys typed there,
 # ~BOOT~ to reboot into BOOTSEL, ~RST~ to restart. The PS/2 port on those
 # pins (M2: mouse, M1: keyboard) is then off.
+# TW: the console is UART1 on GPIO8/9 (its CH340C "USB CONSOLE" socket),
+# both PS/2 ports stay.
 option(FRANK_UART_CONSOLE "UART0 console on GPIO0/1 instead of that PS/2 port" OFF)
 # A bench with a debug probe's UART on GPIO0/1: the M2's PS/2 mouse driver
 # holds GPIO0 low, which the probe takes for an endless break and stops
@@ -425,7 +453,11 @@ endif()
 if(FRANK_UART_CONSOLE)
     pico_enable_stdio_uart(frank-idtech1 1)
     target_compile_definitions(frank-idtech1 PRIVATE FRANK_UART_CONSOLE=1)
-    message(STATUS "UART0 console on GPIO0/1 (PS/2 on those pins off)")
+    if(BOARD_VARIANT STREQUAL "TW")
+        message(STATUS "UART1 console on GPIO8/9 (the on-board CH340C)")
+    else()
+        message(STATUS "UART0 console on GPIO0/1 (PS/2 on those pins off)")
+    endif()
 else()
     pico_enable_stdio_uart(frank-idtech1 0)
 endif()

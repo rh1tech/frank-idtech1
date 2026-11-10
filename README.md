@@ -32,6 +32,7 @@ This firmware is designed for RP2350-based boards with integrated HDMI, SD card,
 - **[FRANK](https://rh1.tech/projects/frank?area=about)** -- A versatile development board based on RP Pico 2, HDMI output, and extensive I/O options.
 - **[Murmulator](https://murmulator.ru)** -- A compact retro-computing platform based on RP Pico 2, designed for emulators and classic games (M1 and M2 layouts).
 - **[Waveshare RP2350-PiZero](https://www.waveshare.com/rp2350-pizero.htm)** (Z0) -- An RP2350B board with HDMI, a micro SD slot, 8 MB PSRAM and a second, "PIO-USB" USB-C socket for the keyboard.
+- **[UKTailwind Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3)** (TW) -- An RP2350B board with HDMI, a micro SD slot, 8 MB PSRAM, a PCM5102A I2S DAC and a four-port USB hub.
 
 All of them provide the necessary peripherals out of the box -- no additional wiring required (the Z0 needs an I2S DAC module for I2S sound; HDMI sound works without one).
 
@@ -44,9 +45,9 @@ All of them provide the necessary peripherals out of the box -- no additional wi
 - Full OPL2 music emulation (EMU8950 with ARM assembly optimizations)
 - 8MB QSPI PSRAM support for game data
 - SD card support for WAD files and savegames
-- PS/2 and USB keyboard and mouse input (USB host on the native USB port; on Z0 on its "PIO-USB" socket)
+- PS/2 and USB keyboard and mouse input (USB host on the native USB port; on Z0 on its "PIO-USB" socket, on TW through its USB hub)
 - USB gamepads: XInput (Xbox 360/One, F710 in X mode), DualShock 4, DualSense, F710 in D mode, common clones and generic HID pads; analog move, turn and look
-- NES/SNES pads on the M2 and Z0 joystick ports
+- NES/SNES pads on the M2 and Z0 joystick ports (TW: on its EXTERNAL I/O header)
 - Keyboard layouts: US, UK, German, French
 - F12 (or the pad's Back) settings window in every game, described below
 - Board settings in `frank-idtech1.ini` on the SD card; a clock that fails to start reverts to the build's by itself
@@ -68,67 +69,72 @@ FRANK idTech1 requires 8MB PSRAM to run. You can obtain PSRAM-equipped hardware 
 1. **Solder a PSRAM chip** on top of the Flash chip on a Pico 2 clone (SOP-8 flash chips are only available on clones, not the original Pico 2)
 2. **Build a [Nyx 2](https://rh1.tech/projects/nyx?area=nyx2)** -- a DIY RP2350 board with integrated PSRAM
 3. **Purchase a [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107)** -- a ready-made Pico 2 with 8MB PSRAM
-4. **Use a [Waveshare RP2350-PiZero](https://www.waveshare.com/rp2350-pizero.htm)** -- PSRAM on board
+4. **Use a [Waveshare RP2350-PiZero](https://www.waveshare.com/rp2350-pizero.htm)** or a **[Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3)** -- PSRAM on board
 
 ## Board Configurations
 
-Three GPIO layouts are supported: **M1**, **M2** and **Z0**. On M1/M2 the PSRAM pin is auto-detected based on chip package:
-- **RP2350B**: GPIO47 (M1, M2 and Z0)
+Four GPIO layouts are supported: **M1**, **M2**, **Z0** and **TW**. On M1/M2 the PSRAM pin is auto-detected based on chip package:
+- **RP2350B**: GPIO47 (M1, M2, Z0 and TW)
 - **RP2350A**: GPIO19 (M1) or GPIO8 (M2)
 
 ### HDMI (via 270 ohm resistors)
-| Signal | M1 GPIO | M2 GPIO |
-|--------|---------|---------|
-| CLK-   | 6       | 12      |
-| CLK+   | 7       | 13      |
-| D0-    | 8       | 14      |
-| D0+    | 9       | 15      |
-| D1-    | 10      | 16      |
-| D1+    | 11      | 17      |
-| D2-    | 12      | 18      |
-| D2+    | 13      | 19      |
+| Signal | M1 GPIO | M2, TW GPIO |
+|--------|---------|-------------|
+| CLK-   | 6       | 12          |
+| CLK+   | 7       | 13          |
+| D0-    | 8       | 14          |
+| D0+    | 9       | 15          |
+| D1-    | 10      | 16          |
+| D1+    | 11      | 17          |
+| D2-    | 12      | 18          |
+| D2+    | 13      | 19          |
 
 Z0: the on-board HDMI connector, data pairs on GPIO32-37 and the clock pair on GPIO38/39.
 
 ### SD Card (SPI mode)
-| Signal  | M1 GPIO | M2 GPIO | Z0 GPIO |
-|---------|---------|---------|---------|
-| CLK     | 2       | 6       | 30      |
-| CMD     | 3       | 7       | 31      |
-| DAT0    | 4       | 4       | 40      |
-| DAT3/CS | 5       | 5       | 43      |
+| Signal  | M1 GPIO | M2 GPIO | Z0 GPIO | TW GPIO |
+|---------|---------|---------|---------|---------|
+| CLK     | 2       | 6       | 30      | 30      |
+| CMD     | 3       | 7       | 31      | 31      |
+| DAT0    | 4       | 4       | 40      | 28      |
+| DAT3/CS | 5       | 5       | 43      | 33      |
 
 ### PS/2 Keyboard
-| Signal | M1 GPIO | M2 GPIO | Z0 GPIO |
-|--------|---------|---------|---------|
-| CLK    | 0       | 2       | 2       |
-| DATA   | 1       | 3       | 3       |
+| Signal | M1 GPIO | M2 GPIO | Z0 GPIO | TW GPIO |
+|--------|---------|---------|---------|---------|
+| CLK    | 0       | 2       | 2       | 2       |
+| DATA   | 1       | 3       | 3       | 3       |
 
 ### PS/2 Mouse
-| Signal | M1 GPIO | M2 GPIO | Z0 GPIO |
-|--------|---------|---------|---------|
-| CLK    | 14      | 0       | 0       |
-| DATA   | 15      | 1       | 1       |
+| Signal | M1 GPIO | M2 GPIO | Z0 GPIO | TW GPIO |
+|--------|---------|---------|---------|---------|
+| CLK    | 14      | 0       | 0       | 0       |
+| DATA   | 15      | 1       | 1       | 1       |
+
+TW has no PS/2 sockets: both ports are on its EXTERNAL I/O header, for a PS/2 adapter.
 
 ### I2S Audio
-| Signal | M1 GPIO | M2 GPIO | Z0 GPIO |
-|--------|---------|---------|---------|
-| DATA   | 26      | 9       | 10      |
-| BCLK   | 27      | 10      | 11      |
-| LRCLK  | 28      | 11      | 12      |
+| Signal | M1 GPIO | M2 GPIO | Z0 GPIO | TW GPIO |
+|--------|---------|---------|---------|---------|
+| DATA   | 26      | 9       | 10      | 22      |
+| BCLK   | 27      | 10      | 11      | 10      |
+| LRCLK  | 28      | 11      | 12      | 11      |
+
+TW: the on-board PCM5102A and its 3.5 mm jack.
 
 ### NES/SNES Pad
-| Signal | M2 GPIO | Z0 GPIO |
-|--------|---------|---------|
-| CLK    | 20      | 4       |
-| LATCH  | 21      | 7       |
-| DATA   | 26      | 6       |
+| Signal | M2 GPIO | Z0 GPIO | TW GPIO |
+|--------|---------|---------|---------|
+| CLK    | 20      | 4       | 4       |
+| LATCH  | 21      | 7       | 7       |
+| DATA   | 26      | 6       | 6       |
 
 Not on M1, whose GPIO14/15 carry the PS/2 mouse.
 
 ### USB
 - **M1, M2:** the Pico's own USB port is the USB host for keyboards, mice and gamepads (through an OTG adapter or a hub).
 - **Z0:** the "PIO-USB" USB-C socket (D+ GPIO28, D- GPIO29) is the USB host. The other socket ("USB") is for power and flashing.
+- **TW:** the native USB goes to the on-board four-port hub (the USB-A sockets) or to the micro USB socket, picked by the board's USB switch: hub for play, micro USB for flashing. The "USB CONSOLE" USB-C socket is a CH340C on UART1 (GPIO8/9), used by `-DFRANK_UART_CONSOLE=ON`.
 
 ## Building
 
@@ -150,9 +156,10 @@ mkdir build && cd build
 cmake -DBOARD_VARIANT=M1 ..
 make -j$(nproc)
 
-# Build for M2 or Z0
+# Build for M2, Z0 or TW
 cmake -DBOARD_VARIANT=M2 ..
 cmake -DBOARD_VARIANT=Z0 ..
+cmake -DBOARD_VARIANT=TW ..
 ```
 
 ### Build Options
@@ -162,6 +169,7 @@ cmake -DBOARD_VARIANT=Z0 ..
 | `-DBOARD_VARIANT=M1` | M1 GPIO layout (default) |
 | `-DBOARD_VARIANT=M2` | M2 GPIO layout |
 | `-DBOARD_VARIANT=Z0` | Waveshare RP2350-PiZero |
+| `-DBOARD_VARIANT=TW` | UKTailwind Pico Computer 3 |
 | `-DCPU_SPEED=504` | CPU clock in MHz: 252 or 504 (HDMI needs a multiple of 252) |
 | `-DPSRAM_SPEED=100` | PSRAM speed in MHz |
 | `-DFLASH_SPEED=66` | Flash speed in MHz |
@@ -186,6 +194,7 @@ This creates versioned UF2 files in the `release/` directory:
 - `frank-idtech1_m1_X_XX.uf2` (504 MHz CPU, 100 MHz PSRAM)
 - `frank-idtech1_m2_X_XX.uf2` (504 MHz CPU, 100 MHz PSRAM)
 - `frank-idtech1_z0_X_XX.uf2` (504 MHz CPU, 133 MHz PSRAM, USB on the PIO-USB socket)
+- `frank-idtech1_tw_X_XX.uf2` (504 MHz CPU, 133 MHz PSRAM, USB through the on-board hub)
 
 ### Flashing
 

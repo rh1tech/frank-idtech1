@@ -25,6 +25,8 @@
 #endif
 #if defined(BOARD_Z0)
 #define BOARD_NAME "Z0"
+#elif defined(BOARD_TW)
+#define BOARD_NAME "TW"
 #elif defined(BOARD_M2)
 #define BOARD_NAME "M2"
 #else

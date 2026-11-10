@@ -2,14 +2,16 @@
 #
 # release.sh - Build release variants of frank-idtech1
 #
-# Creates UF2 files for each board variant (M1, M2, Z0).
+# Creates UF2 files for each board variant (M1, M2, Z0, TW).
 # M1/M2: 504 MHz CPU, 100 MHz PSRAM, 66 MHz Flash.
 # Z0 (Waveshare RP2350-PiZero): 504 MHz CPU, 133 MHz PSRAM, 66 MHz Flash,
 # USB keyboard/mouse on its "PIO-USB" socket.
+# TW (UKTailwind Pico Computer 3): 504 MHz CPU, 133 MHz PSRAM, 66 MHz Flash,
+# USB keyboard/mouse on its four-port hub.
 # USB HID and PS/2 keyboard/mouse supported.
 #
 # Output format: frank-idtech1_B_A_BB.uf2
-#   B  = Board variant (m1, m2 or z0)
+#   B  = Board variant (m1, m2, z0 or tw)
 #   A  = Major version
 #   BB = Minor version (zero-padded)
 #
@@ -102,6 +104,7 @@ CONFIGS=(
     "M1 504 100 66"
     "M2 504 100 66"
     "Z0 504 133 66"
+    "TW 504 133 66"
 )
 
 BUILD_COUNT=0
